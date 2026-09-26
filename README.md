@@ -14,7 +14,7 @@
 
 ## 下载安装
 
-[下载 Windows 64 位安装包（1.0）](https://github.com/ltebsxy/AIstudy/releases/download/v1.0.0/StudyDesk-Setup-1.0.0.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v1.0.0)
+[下载 Windows 64 位安装包（1.0.1）](https://github.com/ltebsxy/AIstudy/releases/download/v1.0.1/StudyDesk-Setup-1.0.1.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v1.0.1)
 
 下载后运行安装包即可，无需安装 Node.js。私有仓库需要登录有访问权限的 GitHub 账号才能下载。
 
@@ -37,7 +37,7 @@ npm start
 npm run dist
 ```
 
-构建后双击根目录 **Start.cmd**，或运行 `app/win-unpacked/StudyDesk.exe`。安装包位于 `app/StudyDesk-Setup-1.0.0.exe`。
+构建后双击根目录 **Start.cmd**，或运行 `app/win-unpacked/StudyDesk.exe`。安装包位于 `app/StudyDesk-Setup-1.0.1.exe`。
 
 ## AI 设置
 

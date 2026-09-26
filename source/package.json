@@ -1,6 +1,6 @@
 {
   "name": "study-desk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "本地学习与做题桌面软件",
   "main": "main.js",
