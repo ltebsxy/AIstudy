@@ -12,9 +12,15 @@
 - API 与 Harness 分开配置；支持兼容 Chat Completions 的服务及自定义 HTTP 桥接。
 - 聊天记录本地分页加载，支持压缩上下文；API 支持清除上下文。
 
+## 下载安装
+
+[下载 Windows 64 位安装包（1.0）](https://github.com/ltebsxy/AIstudy/releases/download/v1.0.0/StudyDesk-Setup-1.0.0.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v1.0.0)
+
+下载后运行安装包即可，无需安装 Node.js。私有仓库需要登录有访问权限的 GitHub 账号才能下载。
+
 ## 启动与构建
 
-仓库提供源码，不包含个人课程、API Key、聊天记录、依赖目录或安装包。新安装时课程列表为空，请自行创建或导入。
+代码仓库提供源码；安装包通过 Releases 单独发布。源码和安装包均不包含个人课程、API Key 或聊天记录。新安装时课程列表为空，请自行创建或导入。
 
 Windows 上安装 Node.js 22 或更高版本后，在仓库根目录打开终端：
 
@@ -31,7 +37,7 @@ npm start
 npm run dist
 ```
 
-构建后双击根目录 **Start.cmd**，或运行 `app/win-unpacked/StudyDesk.exe`。安装包位于 `app/StudyDesk-Setup-0.7.0.exe`。
+构建后双击根目录 **Start.cmd**，或运行 `app/win-unpacked/StudyDesk.exe`。安装包位于 `app/StudyDesk-Setup-1.0.0.exe`。
 
 ## AI 设置
 
