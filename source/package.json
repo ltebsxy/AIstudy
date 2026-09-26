@@ -1,6 +1,6 @@
 {
   "name": "study-desk",
-  "version": "1.0.1",
+  "version": "0.1.2",
   "private": true,
   "description": "本地学习与做题桌面软件",
   "main": "main.js",
@@ -11,16 +11,23 @@
     "dist": "electron-builder --win nsis",
     "smoke:course": "node tests/course-smoke.js",
     "vendor:math": "node scripts/sync-math-assets.js",
-    "predist": "npm run vendor:math",
+    "predist": "npm run vendor:math && npm run vendor:reader",
     "smoke:math": "node tests/math-smoke.js",
     "smoke:workflow": "node tests/workflow-smoke.js",
     "smoke:selection": "node tests/lesson-selection-smoke.js",
     "smoke:chat-capture": "node tests/chat-capture-smoke.js",
-    "smoke:settings": "node tests/settings-history-smoke.js"
+    "smoke:settings": "node tests/settings-history-smoke.js",
+    "smoke:modes": "node tests/study-modes-smoke.js",
+    "smoke:library": "node tests/library-smoke.js",
+    "vendor:reader": "node scripts/sync-reader-assets.js",
+    "smoke:reader": "node tests/reader-smoke.js",
+    "smoke:writer": "node tests/infinite-writer-smoke.js",
+    "smoke:writer-layout": "node tests/writer-layout-smoke.js"
   },
   "devDependencies": {
     "electron": "44.4.5",
     "electron-builder": "^26.0.12",
+    "pdfjs-dist": "6.3.289",
     "playwright-core": "^1.63.0"
   },
   "build": {

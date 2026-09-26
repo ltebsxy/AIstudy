@@ -17,3 +17,5 @@
 .chat-compose .ai-compose-actions{justify-content:flex-end}
 .context-actions{display:flex;gap:8px;flex-shrink:0}
 .ai-chat-tools{gap:6px}.ai-chat-tools .compact-button{padding:8px 7px;font-size:11px}.ai-chat-tools .ai-mode-select{text-overflow:ellipsis}
+
+.settings-menu{display:grid;gap:16px;margin-top:28px}.settings-menu button{text-align:left;cursor:pointer;font:inherit;color:inherit;border:1px solid #dce6df}.settings-menu strong{display:block;font-size:18px;margin-bottom:8px}.settings-menu span{color:#7b8f8a;font-size:13px}.settings-menu button:hover{border-color:#75a79b}#api-system-prompt{min-height:150px;resize:vertical}

@@ -27,6 +27,8 @@ chat-images/
 captures/
 submissions/
 userData/
+data/
+library.json*
 study-desk/
 *.pem
 *.key

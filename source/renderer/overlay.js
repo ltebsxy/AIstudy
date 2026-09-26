@@ -1,7 +1,14 @@
+const embedded=new URLSearchParams(location.search).has('embedded');
+const chatOnly=()=>embedded||reading();
 const content = document.getElementById('content');
 let course = null;
 let index = 0;
 let captured = [];
+let responses={},responseSave=Promise.resolve(),responseError=null,moving=false;
+const reading=()=>course?.sessionMode==='reading';
+const chatScope=()=>reading()?'reading':'exercise';
+async function afterResponse(action){if(moving)return;moving=true;try{await responseSave;if(responseError)throw responseError;await action();}catch(e){alert(e.message||String(e));}finally{moving=false;}}
+function queueResponse(value){const savedIndex=index,savedSession=course.sessionId;responses[savedIndex]=value;responseError=null;responseSave=responseSave.then(()=>window.study.saveResponse({index:savedIndex,value,sessionId:savedSession})).then(()=>{responseError=null;},e=>{responseError=e;const status=document.getElementById('response-status');if(status)status.textContent=e.message;});}
 let mode = 'question';
 let messages = [];
 let busy = false;
@@ -14,37 +21,49 @@ let compacting=false,contextStatus='';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function footer() {
+  if(chatOnly())return '<footer class="footer reading-footer"><select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button class="footer-button" id="capture" '+(busy||attachments.length>=4?'disabled':'')+'>▣ 截图提问</button><button class="footer-button" id="open-writer">✎ 文件与笔记</button></footer>';
   return `<footer class="footer"><button class="footer-button" id="capture" ${busy || (mode === 'chat' && attachments.length >= 4) ? 'disabled' : ''}>▣ 截图</button><button class="footer-button" id="toggle-chat">${mode === 'chat' ? '▤ 返回题目' : '✦ AI 聊天'}</button><button class="footer-button finish" id="finish" ${busy ? 'disabled' : ''}>${index === course.questions.length - 1 ? '完成并提交' : '完成，下一题'}</button></footer>`;
 }
 
 function bindFooter() {
   document.getElementById('capture').onclick = async () => {
-    try { await window.study.startCapture(mode === 'chat' ? 'chat' : 'answer'); } catch (error) { alert(error.message || String(error)); }
+    await afterResponse(()=>window.study.startCapture(mode === 'chat' ? 'chat' : 'answer'));
   };
-  document.getElementById('toggle-chat').onclick = () => {
+  document.getElementById('open-writer')?.addEventListener('click',()=>window.study.openWriter().catch(e=>alert(e.message)));
+  if(chatOnly())return;
+  document.getElementById('toggle-chat').onclick = () => afterResponse(async () => {
     mode = mode === 'chat' ? 'question' : 'chat';
     draw();
-    if (mode === 'chat' && !busy) loadConnection();
-  };
-  document.getElementById('finish').onclick = async (event) => { event.currentTarget.disabled = true; try { await window.study.finishSession(); } catch (e) { alert(e.message); draw(); } };
+    if (mode === 'chat' && !busy) await loadConnection();
+  });
+  document.getElementById('finish').onclick = () => afterResponse(()=>window.study.finishSession());
 }
 
+function responseMarkup(question) {
+  const value=responses[index]||[];
+  if(question.type==='choice')return '<div class="response-options">'+question.options.map((option,i)=>'<label class="response-option"><input type="'+(question.multiple?'checkbox':'radio')+'" name="answer-option" value="'+i+'" '+(value.includes(i)?'checked':'')+'><span>'+String.fromCharCode(65+i)+'. <span class="option-text">'+esc(option)+'</span></span></label>').join('')+'</div>';
+  if(question.type==='blank')return '<div class="response-blanks">'+(question.blanks||['答案']).map((label,i)=>'<label>'+esc(label)+'<input class="blank-answer" data-blank="'+i+'" aria-label="'+esc(label)+'" value="'+esc(value[i]||'')+'" maxlength="5000" autocomplete="off"></label>').join('')+'</div>';
+  return '<button class="nav-button writer-entry" id="open-writer">✎ 打开写字工具</button>';
+}
 function drawQuestion() {
   const question = course.questions[index];
-  content.innerHTML = `<div class="body"><div class="course-title">${esc(course.title)}</div><div class="question-count">题目 ${String(index + 1).padStart(2, '0')} / ${String(course.questions.length).padStart(2, '0')}</div><div class="question-scroll"><p class="question-text">${esc(question.text)}</p>${question.image ? `<img class="question-image" src="${question.image}" alt="当前题目图片">` : ''}</div><div class="page-row"><span class="dots">${index + 1} / ${course.questions.length}</span><div><button class="nav-button" id="prev" ${index === 0 ? 'disabled' : ''}>上一题</button> <button class="nav-button" id="next" ${index === course.questions.length - 1 ? 'disabled' : ''}>下一题</button></div></div>${footer()}</div>`;
-  document.getElementById('prev').onclick = () => window.study.navigateQuestion(index - 1).catch(e=>alert(e.message));
-  document.getElementById('next').onclick = () => window.study.navigateQuestion(index + 1).catch(e=>alert(e.message));
+  content.innerHTML = `<div class="body"><div class="course-title">${esc(course.title)}</div><div class="question-count">题目 ${String(index + 1).padStart(2, '0')} / ${String(course.questions.length).padStart(2, '0')}</div><div class="question-scroll"><p class="question-text">${esc(question.text)}</p>${question.image ? `<img class="question-image" src="${question.image}" alt="当前题目图片">` : ''}${responseMarkup(question)}<div id="response-status" role="status"></div></div><div class="page-row"><span class="dots">${index + 1} / ${course.questions.length}</span><div><button class="nav-button" id="prev" ${index === 0 ? 'disabled' : ''}>上一题</button> <button class="nav-button" id="next" ${index === course.questions.length - 1 ? 'disabled' : ''}>下一题</button></div></div>${footer()}</div>`;
+  document.getElementById('prev').onclick = () => afterResponse(()=>window.study.navigateQuestion(index - 1));
+  document.getElementById('next').onclick = () => afterResponse(()=>window.study.navigateQuestion(index + 1));
   const note = document.createElement('div'); note.className = 'capture-note';
-  note.textContent = captured.includes(index) ? '本题截图已保存；重新截图会替换。' : (index === course.questions.length - 1 ? '截图后保存本题，进入提交页。' : '截图后自动标记题号，继续下一题。');
+  note.textContent = ['choice','blank'].includes(question.type) ? '作答自动保存；点击完成继续。' : captured.includes(index) ? '本题截图已保存；重新截图会替换。' : (index === course.questions.length - 1 ? '截图后保存本题，进入提交页。' : '截图后自动标记题号，继续下一题。');
   content.querySelector('.page-row').before(note);
   StudyMath.render(content.querySelector('.question-text'));
+  content.querySelectorAll('.option-text').forEach(el=>StudyMath.render(el));
+  content.querySelectorAll('[name="answer-option"]').forEach(input=>input.onchange=()=>queueResponse([...content.querySelectorAll('[name="answer-option"]:checked')].map(el=>Number(el.value))));
+  content.querySelectorAll('.blank-answer').forEach(input=>input.oninput=()=>queueResponse([...content.querySelectorAll('.blank-answer')].map(el=>el.value)));
   bindFooter();
 }
 
 function drawChat() {
   const older=historyPage.hasMore?`<button class="desktop-continue history-more" ${loadingHistory||busy?'disabled':''}>加载更早消息</button>`:'';
   const bubbles = messages.map((message) => `<div class="message ${message.role === 'user' ? 'user' : message.error ? 'error' : 'assistant'}">${esc(message.text)}${(message.images || []).map(image=>`<img class="chat-sent-image" src="${esc(image.image)}" alt="已发送截图">`).join('')}</div>`).join('');
-  content.innerHTML = `<div class="body"><div class="ai-chat-tools"><select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button id="chat-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">${compacting?'压缩中…':'压缩上下文'}</button>${connectionConfig?.mode==='api'?'<button id="chat-reset" class="compact-button" title="清除当前 API 对话的历史上下文和摘要；本地聊天记录保留">清除上下文</button>':''}</div><div class="chat-subtitle" role="status"></div><div class="messages" id="messages">${older}${bubbles || '<div class="chat-empty">在这里输入问题，<br>左上角可切换模型。</div>'}</div>${desktopMessage && !busy ? '<button class="desktop-continue" id="desktop-continue">复制问题并打开 Codex</button>' : ''}${attachments.length ? `<div class="chat-attachments">${attachments.map((item,i)=>`<div class="chat-attachment"><img src="${esc(item.image)}" alt="截图 ${i+1}"><button data-remove-image="${i}" aria-label="移除截图 ${i+1}" ${busy ? 'disabled' : ''}>×</button></div>`).join('')}</div>` : ''}<div class="chat-compose"><textarea id="chat-input" placeholder="输入你的问题…" ${busy ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-compose-actions"><button id="send-message" aria-label="${busy ? '停止等待' : '发送'}" title="${busy ? '停止等待' : '发送'}"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">${busy ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'}</svg></button></div></div>${footer()}</div>`;
+  content.innerHTML = `<div class="body"><div class="ai-chat-tools">${chatOnly()?'':'<select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select>'}<button id="chat-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">${compacting?'压缩中…':'压缩上下文'}</button>${connectionConfig?.mode==='api'?'<button id="chat-reset" class="compact-button" title="清除当前 API 对话的历史上下文和摘要；本地聊天记录保留">清除上下文</button>':''}</div><div class="chat-subtitle" role="status"></div><div class="messages" id="messages">${older}${bubbles || (reading()?'<div class="chat-empty">阅读文件，随时提问。<br>截图可将选中的内容加入提问。</div>':`<div class="chat-empty">在这里输入问题，<br>${chatOnly()?'下方':'左上角'}可切换模型。</div>`)}</div>${desktopMessage && !busy ? '<button class="desktop-continue" id="desktop-continue">复制问题并打开 Codex</button>' : ''}${attachments.length ? `<div class="chat-attachments">${attachments.map((item,i)=>`<div class="chat-attachment"><img src="${esc(item.image)}" alt="截图 ${i+1}"><button data-remove-image="${i}" aria-label="移除截图 ${i+1}" ${busy ? 'disabled' : ''}>×</button></div>`).join('')}</div>` : ''}<div class="chat-compose"><textarea id="chat-input" placeholder="输入你的问题…" ${busy ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-compose-actions"><button id="send-message" aria-label="${busy ? '停止等待' : '发送'}" title="${busy ? '停止等待' : '发送'}"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">${busy ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'}</svg></button></div></div>${footer()}</div>`;
   content.querySelectorAll('[data-remove-image]').forEach(button=>button.onclick=()=>{attachments.splice(Number(button.dataset.removeImage),1);drawChat();});
   const compactButton=document.getElementById('chat-compact');
   if(historyPage.summary)compactButton.title='当前上下文摘要（AI 生成，可对照历史核查）：\n'+historyPage.summary.text;
@@ -52,7 +71,7 @@ function drawChat() {
   compactButton.onclick=async()=>{
     if(busy||loadingHistory||switchingConnection)return;
     busy=true;compacting=true;contextStatus='正在压缩上下文…';drawChat();
-    try{const result=await window.study.compactContext({scope:'exercise',courseId:course.id});contextStatus=result.message;if(result.summary)historyPage.summary=result.summary;}
+    try{const result=await window.study.compactContext({scope:chatScope(),courseId:course.id});contextStatus=result.message;if(result.summary)historyPage.summary=result.summary;}
     catch(e){contextStatus=e.message;}
     finally{busy=false;compacting=false;if(mode==='chat')drawChat();}
   };
@@ -62,7 +81,7 @@ function drawChat() {
     resetButton.onclick=async()=>{
       if(busy||loadingHistory||switchingConnection)return;
       busy=true;drawChat();
-      try{const result=await window.study.clearContext({scope:'exercise',courseId:course.id});historyPage.summary=null;contextStatus=result.message;}
+      try{const result=await window.study.clearContext({scope:chatScope(),courseId:course.id});historyPage.summary=null;contextStatus=result.message;}
       catch(e){contextStatus=e.message;}
       finally{busy=false;if(mode==='chat')drawChat();}
     };
@@ -100,7 +119,7 @@ async function loadHistory(reset=true){
   const generation=reset?++historyGeneration:historyGeneration;loadingHistory=true;
   const list=document.getElementById('messages'),oldHeight=list?.scrollHeight||0,oldTop=list?.scrollTop||0;
   try{
-    const result=await window.study.chatHistory({scope:'exercise',courseId:course.id,before:reset?undefined:historyPage.before});
+    const result=await window.study.chatHistory({scope:chatScope(),courseId:course.id,before:reset?undefined:historyPage.before});
     if(generation!==historyGeneration)return;
     messages=reset||result.key!==historyPage.key?result.items:[...result.items,...messages];historyPage=result;
     desktopMessage=messages.findLast(m=>m.pending)?.pending||null;
@@ -178,6 +197,10 @@ window.study.onCodexAnswer((text) => {
   }
 });
 window.study.onChatCapture(image=>{attachments.push(image);mode='chat';draw();});
-window.study.onCourse((next) => { contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';desktopMessage=null;course = next; index = 0; captured = []; mode = 'question'; draw(); });
-window.study.onProgress((progress) => { if(index!==progress.index)attachments=[];index = progress.index; captured = progress.captured; draw(); });
-document.getElementById('back-main').onclick = () => window.study.pauseSession();
+window.study.onCourse((next) => {contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';desktopMessage=null;course=next;index=0;captured=[];responses={};responseSave=Promise.resolve();responseError=null;mode=chatOnly()?'chat':'question';document.getElementById('close-ai').hidden=!chatOnly();document.querySelector('.dragbar strong').textContent=chatOnly()?'AI 问答':'正在练习';draw();if(chatOnly())loadConnection();});
+window.study.onProgress((progress) => {const changed=index!==progress.index;if(changed)attachments=[];index=progress.index;captured=progress.captured;responses=changed?(progress.responses||{}):{...(progress.responses||{}),...responses};if(changed&&!embedded)draw();});
+document.getElementById('back-main').onclick = () => afterResponse(()=>window.study.pauseSession());
+
+window.study.onOpenChat(()=>{document.getElementById('close-ai').hidden=false;if(!course||mode==='chat')return;afterResponse(async()=>{mode='chat';draw();if(!busy)await loadConnection();});});
+
+document.getElementById('close-ai').onclick=()=>window.study.toggleWriterAI({sessionId:course?.sessionId}).catch(e=>alert(e.message));

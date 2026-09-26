@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; style-src-attr 'unsafe-inline'; font-src 'self' blob: data:; connect-src 'self'; worker-src 'self' blob:; script-src 'self' 'wasm-unsafe-eval'">
+  <title>知序写字</title>
+  <link rel="stylesheet" href="writer.css">
+  <link rel="stylesheet" href="vendor/katex/katex.min.css">
+  <link rel="stylesheet" href="math.css">
+</head>
+<body>
+  <svg class="svg-definitions" aria-hidden="true"><defs>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M8 5 3 10l5 5M3 10h11a6 6 0 0 1 0 12"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 12V6a2 2 0 0 1 4 0v5-7a2 2 0 0 1 4 0v8-5a2 2 0 0 1 4 0v9c0 4-3 6-6 6-4 0-6-3-8-6l-3-4a2 2 0 0 1 3-2l2 2Z"/></symbol>
+    <symbol id="i-eraser" viewBox="0 0 24 24"><path d="m14 3 7 7-11 11H6l-5-5L14 3Zm-9 9 7 7M10 21h12"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 3v18M12 3v18M20 3v18"/><path class="knob" d="M1 7h6v4H1zM9 14h6v4H9zM17 5h6v4h-6z"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 36"><path d="M6 2h12v17l-6 14-6-14Z" fill="var(--ink)" stroke="currentColor"/><path d="M6 14h12v6H6Z" fill="white" stroke="currentColor"/><path d="m9 27 3 6 3-6" fill="currentColor"/></symbol>
+    <symbol id="i-marker" viewBox="0 0 24 36"><path d="M3 2h18v15l-5 6H8l-5-6Z" fill="#f6df52" stroke="currentColor"/><path d="M8 23h8v7l-8 3Z" fill="#dfb824" stroke="currentColor"/></symbol>
+  </defs></svg>
+  <main id="paper-area" aria-label="连续画布"><div id="scroll-space"></div></main>
+  <canvas id="document-layer" aria-hidden="true"></canvas><section id="canvas-question" hidden aria-label="当前题目"><header><span id="question-number"></span><select id="question-select" aria-label="切换题目"></select></header><div id="question-text"></div><img id="question-image" hidden alt="题目图片"><div id="question-response"></div><div id="response-status" role="status"></div></section><canvas id="paper" aria-label="手写画布"></canvas>
+  <div class="corner-left"><button id="back-course" class="icon-button" title="返回课程" aria-label="返回课程">←</button><span id="course-title"></span></div>
+  <div class="toolbar" role="toolbar" aria-label="写字工具">
+    <button id="undo" class="icon-button" title="撤销 · Ctrl+Z" aria-label="撤销"><svg><use href="#i-undo"/></svg></button>
+    <button id="redo" class="icon-button" title="重做 · Ctrl+Shift+Z" aria-label="重做"><svg class="mirror"><use href="#i-undo"/></svg></button><i class="separator"></i>
+    <button id="hand" class="icon-button" title="拖动画布 · H" aria-label="拖动画布" aria-pressed="false"><svg><use href="#i-hand"/></svg></button>
+    <button id="eraser" class="icon-button" title="橡皮 · E" aria-label="橡皮" aria-pressed="false"><svg><use href="#i-eraser"/></svg></button><i class="separator"></i>
+    <button id="pen" class="pen-button selected" data-pen="#253445" style="--ink:#253445" title="黑色画笔 · P" aria-label="黑色画笔" aria-pressed="true"><svg><use href="#i-pen"/></svg></button>
+    <button class="pen-button" data-pen="#d64e54" style="--ink:#d64e54" title="红色画笔" aria-label="红色画笔" aria-pressed="false"><svg><use href="#i-pen"/></svg></button>
+    <button class="pen-button" data-pen="#2797bf" style="--ink:#2797bf" title="蓝色画笔" aria-label="蓝色画笔" aria-pressed="false"><svg><use href="#i-pen"/></svg></button>
+    <button id="highlighter" class="pen-button" title="荧光笔" aria-label="荧光笔" aria-pressed="false"><svg><use href="#i-marker"/></svg></button><i class="separator"></i>
+    <button id="tool-settings-toggle" class="icon-button" aria-label="画笔设置" title="画笔设置" popovertarget="tool-settings">···</button>
+  </div>
+  <button id="view-settings-toggle" class="icon-button corner-right" aria-label="画布设置" title="画布设置" popovertarget="view-settings"><svg><use href="#i-settings"/></svg></button>
+  <div id="tool-settings" class="popover tool-popover" popover><h3>书写工具</h3><label>画笔颜色 <input id="color" type="color" value="#253445"></label><label>画笔粗细 <input id="width" type="range" min="1" max="18" value="3"></label><label>橡皮大小 <input id="eraser-width" type="range" min="8" max="80" value="24"></label><button id="clear" class="danger">清空当前画布笔迹</button></div>
+  <div id="view-settings" class="popover view-popover" popover><h3>画布设置</h3><div id="file-settings"><label for="file-width">文件宽度 <output id="file-width-value"></output></label><input id="file-width" type="range" min="200" max="1600" step="20" value="720"><label for="file-left">左侧留白 <output id="file-left-value"></output></label><input id="file-left" type="range" min="0" max="800" step="8" value="48"><label for="file-gap">文件页间距 <output id="file-gap-value"></output></label><input id="file-gap" type="range" min="0" max="200" step="4" value="24"><button id="reset-file">恢复文件显示</button></div><button id="return-origin">回到起点</button><p>滚轮上下移动；选择手形工具可拖动。书写到画布底部时向下延伸；滚动和拖动不会增加空白。</p></div>
+  <div id="save-status" role="status">正在载入…</div><div class="writer-actions"><button id="previous-question" class="submit-button">上一题</button><button id="next-question" class="submit-button">下一题</button><button id="capture-answer" class="submit-button">截图答案</button><button id="toggle-ai" class="submit-button" aria-pressed="false" title="打开 AI 问答">AI 问答</button></div>
+  <aside id="writer-ai-panel" hidden aria-label="AI 问答浮窗"><iframe id="writer-ai-frame" src="overlay.html?embedded=1" title="AI 问答"></iframe></aside>
+  <dialog id="pdf-password"><form><h3>请输入 PDF 密码</h3><input type="password" required autocomplete="off" aria-label="PDF 密码"><div><button type="button" data-cancel>取消</button><button type="submit">打开</button></div></form></dialog>
+  <script type="module" src="reader.js"></script>
+  <script src="vendor/katex/katex.min.js"></script><script src="math.js"></script><script src="writer-question.js"></script><script src="board-model.js"></script><script src="ink.js"></script><script src="writer.js"></script>
+</body></html>

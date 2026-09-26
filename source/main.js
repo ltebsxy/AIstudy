@@ -1,18 +1,21 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { randomUUID } = require('node:crypto');
-const { normalizeCourse, normalizeWorkTarget, renderSubmission, learnerCourse, preserveGrading } = require('./lib/model');
+const { randomUUID, createHash } = require('node:crypto');
+const { normalizeCourse, normalizeWorkTarget, renderSubmission, learnerCourse, preserveGrading, questionText } = require('./lib/model');
 const { CodexClient } = require('./lib/codex-client');
 const { DesktopCodex } = require('./lib/desktop-codex');
 const { prepareGrading } = require('./lib/grading');
 const { copyMathAssets } = require('./lib/math-assets');
-const { ExerciseSession } = require('./lib/exercise-session');
+const { ExerciseSession, normalizeWriterDocument } = require('./lib/exercise-session');
 const { lessonPrompt, explainPrompt } = require('./lib/prompts');
+const { resolveWorkTarget, validateDefaultWriter } = require('./lib/writing-settings');
 const { AISettings } = require('./lib/ai-settings');
 const { ChatHistory } = require('./lib/chat-history');
 const { AIService } = require('./lib/ai-service');
+const { Library } = require('./lib/library');
+const { extensions:readingExtensions,inspectDocument,normalizeReadingAnnotations }=require('./lib/reading-document');
 
 if (process.env.STUDY_DATA_DIR) {
   fs.mkdirSync(process.env.STUDY_DATA_DIR, { recursive: true });
@@ -22,6 +25,12 @@ if (process.env.STUDY_DATA_DIR) {
 let mainWindow;
 let overlayWindow;
 let selectionWindow;
+let writerWindow;
+let activeReading = null;
+let sessionMode = 'exercise';
+let writerAIShown = false;
+let sessionId = null;
+let startingSession = false;
 let activeCourseId = null;
 let activeCourse = null;
 let exercise = null;
@@ -47,6 +56,9 @@ const desktopCodex = new DesktopCodex({
 const aiSettings = new AISettings(app.getPath('userData'), safeStorage, readPreferences);
 const chatHistory = new ChatHistory(path.join(app.getPath('userData'), 'chats'));
 const aiService = new AIService(aiSettings, chatHistory, desktopCodex, codexClient);
+const executableFolder=path.dirname(process.execPath);
+const libraryRoot=process.env.STUDY_DATA_DIR?path.join(app.getPath('userData'),'library'):app.isPackaged?path.join(path.basename(executableFolder)==='win-unpacked'?path.dirname(executableFolder):executableFolder,'data'):path.resolve(__dirname,'../app/data');
+const library=new Library(libraryRoot);
 function dataFile() { return path.join(app.getPath('userData'), 'courses.json'); }
 function readPreferences() {
   try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'preferences.json'), 'utf8')); }
@@ -75,7 +87,7 @@ function writeCourses(courses) {
   fs.renameSync(temp, file);
 }
 function trusted(event) {
-  return [mainWindow, overlayWindow, selectionWindow].some((win) => win && !win.isDestroyed() && win.webContents === event.sender);
+  return [mainWindow, overlayWindow, selectionWindow, writerWindow].some((win) => win && !win.isDestroyed() && win.webContents === event.sender);
 }
 function register(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => {
@@ -86,8 +98,10 @@ function register(channel, handler) {
 function webPreferences() {
   return { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true };
 }
+function effectiveWorkTarget(course) { return resolveWorkTarget(course,readPreferences().defaultWorkTarget); }
 async function launchWorkTarget(course) {
-  const target = normalizeWorkTarget(course);
+  const target = effectiveWorkTarget(course);
+  if (usesBuiltin(course)) return '';
   if (target.type === 'onenote') {
     if (!target.url) throw new Error('请先在课程中填写 OneNote 页面链接。');
     await shell.openExternal(target.url);
@@ -108,10 +122,53 @@ async function launchWorkTarget(course) {
   if (error) throw new Error(`做题文件未能打开：${error}`);
   return '';
 }
+function usesBuiltin(course) { return effectiveWorkTarget(course).type==='builtin'; }
+function hasWriter(){return Boolean(writerWindow&&!writerWindow.isDestroyed());}
+function sendChat(channel,...args){const win=hasWriter()?writerWindow:overlayWindow;if(win&&!win.isDestroyed())win.webContents.send(channel,...args);}
+function restoreChat(){if(hasWriter())writerWindow.webContents.send('writer:aiVisibility',writerAIShown);else overlayWindow.show();}
+function sessionCourse() { return {...learnerCourse(activeCourse),sessionMode,sessionId,builtinWriter:hasWriter()}; }
+function pausedState() { return {mode:sessionMode,courseId:activeCourseId}; }
+function sendSession(win) { win.webContents.send('session:course',sessionCourse());win.webContents.send('session:progress',exercise.progress()); }
+async function openWriter() {
+  if (!activeCourse || !exercise) throw new Error('请先进入做题或读写模式。');
+  if (writerWindow && !writerWindow.isDestroyed()) {writerWindow.show();writerWindow.focus();return true;}
+  const win=new BrowserWindow({width:1000,height:820,minWidth:640,minHeight:520,backgroundColor:'#edf2ef',autoHideMenuBar:true,webPreferences:webPreferences()});
+  writerWindow=win;writerAIShown=false;overlayWindow.hide();
+  win.webContents.on('will-navigate',event=>event.preventDefault());win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+  win.on('close',event=>{if(mainWindow&&!mainWindow.isDestroyed()){event.preventDefault();win.hide();overlayWindow.hide();mainWindow.show();mainWindow.webContents.send('session-paused',pausedState());}});
+  win.on('closed',()=>{if(writerWindow===win)writerWindow=null;});
+  await win.loadFile(path.join(__dirname,'renderer','writer.html'));
+  if(activeCourse&&!win.isDestroyed())sendSession(win);
+  return true;
+}
+function writerFile() {
+  if(!activeCourse)throw new Error('请先进入课程。');
+  const key=createHash('sha256').update(JSON.stringify([activeCourseId,sessionMode])).digest('hex');
+  return sessionMode==='reading'?path.join(libraryRoot,'annotations',key+'.json'):path.join(app.getPath('userData'),'writing',key+'.json');
+}
+function maxWriterPages() { return sessionMode==='reading'?5000:activeCourse.questions.length; }
+function storeChatImage(bytes) {
+  if(bytes.length>20*1024*1024)throw new Error('图片超过 20 MB，请缩小区域。');
+  const id=randomUUID(),folder=path.join(app.getPath('userData'),'chat-images');fs.mkdirSync(folder,{recursive:true});
+  const file=path.join(folder,id+'.png');fs.writeFileSync(file,bytes);
+  chatImages.set(id,{file,courseId:activeCourseId,index:exercise.index});
+  sendChat('chat:capture',{id,image:'data:image/png;base64,'+bytes.toString('base64'),number:exercise.index+1});
+  return {chat:true};
+}
+async function readingTarget(course) {
+  const target=normalizeWorkTarget(course);
+  let file=target.filePath;
+  if(!file || !readingExtensions.includes(path.extname(file).slice(1).toLowerCase()) || !fs.existsSync(file)){
+    const selected=await dialog.showOpenDialog(mainWindow,{title:'选择读写文件',properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
+    if(selected.canceled)return null;file=selected.filePaths[0];
+  }
+  inspectDocument(file);
+  return {...course,workTarget:target.type==='app'&&target.appPath?{...target,filePath:file}:{type:'file',filePath:file}};
+}
 function createWindows() {
   mainWindow = new BrowserWindow({ width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
   mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWindow.on('closed', () => { mainWindow = null; if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); });
+  mainWindow.on('closed', () => { mainWindow = null; if (writerWindow && !writerWindow.isDestroyed()) writerWindow.destroy(); if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); });
   const area = screen.getPrimaryDisplay().workArea;
   overlayWindow = new BrowserWindow({
     width: 430, height: 560, minWidth: 360, minHeight: 420,
@@ -123,7 +180,9 @@ function createWindows() {
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu');
   overlayWindow.on('close', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
-      event.preventDefault(); overlayWindow.hide(); mainWindow.show(); mainWindow.webContents.send('session-paused');
+      event.preventDefault();
+      if(sessionMode==='reading'&&writerWindow&&!writerWindow.isDestroyed()){writerAIShown=false;overlayWindow.hide();writerWindow.focus();return;}
+      overlayWindow.hide(); if(writerWindow&&!writerWindow.isDestroyed())writerWindow.hide(); mainWindow.show(); mainWindow.webContents.send('session-paused',pausedState());
     }
   });
   for (const win of [mainWindow, overlayWindow]) {
@@ -135,11 +194,12 @@ function createWindows() {
 async function beginCapture(purpose = 'answer') {
   if (!['answer','chat'].includes(purpose)) throw new Error('截图用途无效。');
   if (selectionWindow && !selectionWindow.isDestroyed()) return;
-  if (!exercise) throw new Error('请先开始做题。');
+  if (!exercise) throw new Error('请先进入课程。');
+  if(sessionMode==='reading')purpose='chat';
   captureQuestion = { courseId: activeCourseId, index: exercise.index, purpose };
-  const bounds = overlayWindow.getBounds();
+  const bounds = hasWriter()?writerWindow.getBounds():overlayWindow.getBounds();
   const display = screen.getDisplayNearestPoint({ x: bounds.x + Math.floor(bounds.width / 2), y: bounds.y + Math.floor(bounds.height / 2) });
-  overlayWindow.hide();
+  overlayWindow.hide();if(hasWriter())writerWindow.webContents.send('writer:aiVisibility',false);
   try {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const sources = await desktopCapturer.getSources({
@@ -167,43 +227,60 @@ async function beginCapture(purpose = 'answer') {
     });
     selectionWindow.on('closed', () => {
       selectionWindow = null; captureImage = null; captureBounds = null; captureQuestion = null;
-      if (activeCourseId && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible() && overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.show();
+      if (activeCourseId && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) restoreChat();
     });
     selectionWindow.loadFile(path.join(__dirname, 'renderer', 'capture.html'));
   } catch (error) {
-    overlayWindow.show();
+    restoreChat();
     throw error;
   }
 }
 
 app.whenReady().then(() => {
   createWindows();
+  register('writing:settings:get', () => validateDefaultWriter(readPreferences().defaultWorkTarget));
+  register('writing:settings:save', input => {
+    const target=validateDefaultWriter(input);
+    if(target.type==='app'&&(!fs.existsSync(target.appPath)||!fs.statSync(target.appPath).isFile()))throw new Error('指定程序不存在，请重新选择。');
+    const file=path.join(app.getPath('userData'),'preferences.json');
+    fs.mkdirSync(path.dirname(file),{recursive:true});
+    fs.writeFileSync(file+'.tmp',JSON.stringify({...readPreferences(),defaultWorkTarget:target},null,2));fs.renameSync(file+'.tmp',file);return target;
+  });
   register('ai:settings:get', () => aiSettings.public());
   register('ai:mode', mode => {
     if(aiService.active||gradingBusy)throw new Error('请等待当前 AI 回复完成再切换连接。');
     const result=aiSettings.switchMode(mode);
-    for(const win of [mainWindow,overlayWindow])win.webContents.send('ai:settings',result);
+    for(const win of [mainWindow,overlayWindow,writerWindow].filter(w=>w&&!w.isDestroyed()))win.webContents.send('ai:settings',result);
     return result;
   });
   register('ai:settings:save', input => {
     if(aiService.active||gradingBusy)throw new Error('请等待当前 AI 回复完成再修改连接。');
     const result=aiSettings.save(input);
     if(result.harness.kind==='codex')selectThread(result.harness.threadId);
-    for(const win of [mainWindow,overlayWindow])win.webContents.send('ai:settings',result);
+    for(const win of [mainWindow,overlayWindow,writerWindow].filter(w=>w&&!w.isDestroyed()))win.webContents.send('ai:settings',result);
     return result;
   });
   register('chat:history', ({scope='lesson',courseId,before}) => aiService.page(scope,courseId,before));
   register('chat:compact', ({scope,courseId}) => {
     if(gradingBusy)throw new Error('请等待批改完成后再压缩。');
-    if(!readCourses().some(c=>c.id===courseId))throw new Error('课程不存在。');
+    if(!readCourses().some(c=>c.id===courseId)&&!(scope==='reading'&&activeCourseId===courseId))throw new Error('课程不存在。');
     return aiService.compact({scope,courseId});
   });
   register('chat:clearContext', ({scope,courseId}) => {
     if(gradingBusy)throw new Error('请等待批改完成后再清除上下文。');
-    if(!readCourses().some(c=>c.id===courseId))throw new Error('课程不存在。');
+    if(!readCourses().some(c=>c.id===courseId)&&!(scope==='reading'&&activeCourseId===courseId))throw new Error('课程不存在。');
     return aiService.clearContext({scope,courseId});
   });
   register('settings:open', () => {overlayWindow.hide();mainWindow.show();mainWindow.focus();mainWindow.webContents.send('settings:open',{exercise:Boolean(activeCourseId)});});
+  register('library:get',()=>{const data=library.read();if(!fs.existsSync(library.file))library.write(data);return {...data,storageFile:library.file};});
+  register('library:folder',input=>library.folder(input));
+  register('library:removeFolder',input=>library.removeFolder(input,readCourses().map(c=>c.id)));
+  register('library:assign',input=>library.assign(input,readCourses().map(c=>c.id)));
+  register('library:select',input=>library.select(input));
+  register('library:importPDF',async input=>{
+    const result=await dialog.showOpenDialog(mainWindow,{title:'导入读写文件',properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
+    return result.canceled?null:library.importPDF(result.filePaths[0],input);
+  });
   register('courses:list', () => readCourses().map(learnerCourse));
   register('courses:importFile', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: '导入课程 JSON', properties: ['openFile'], filters: [{ name: '课程 JSON', extensions: ['json'] }] });
@@ -213,7 +290,7 @@ app.whenReady().then(() => {
     let raw;
     try { raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
     catch { throw new Error('无法读取课程 JSON，请检查文件格式。'); }
-    const course = normalizeCourse({ ...raw, workTarget: { type: 'file', filePath: '' } });
+    const course = normalizeCourse({ ...raw, workTarget: { type: 'default' } });
     writeCourses([course, ...readCourses()]);
     return learnerCourse(course);
   });
@@ -248,44 +325,99 @@ app.whenReady().then(() => {
     const result = await dialog.showOpenDialog(mainWindow, { title: '选择已完成的作答文件', properties: ['openFile'], filters: [{ name: 'PDF 或图片', extensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'] }] });
     return result.canceled ? null : result.filePaths[0];
   });
-  register('session:start', async (id) => {
-    if (selectionWindow) throw new Error('请先结束截图。');
-    if (gradingBusy) throw new Error('AI 正在批改，请等待完成或先停止等待。');
-    const course = readCourses().find((item) => item.id === id);
-    if (!course) throw new Error('课程不存在。');
-    const warning = await launchWorkTarget(course);
-    activeCourseId = id;
-    activeCourse = course;
-    exercise = new ExerciseSession(course);
-    chatImages.clear();
-    overlayWindow.webContents.send('session:course', learnerCourse(course));
-    overlayWindow.webContents.send('session:progress', exercise.progress());
-    overlayWindow.show();
-    mainWindow.hide();
-    return { warning };
+  register('session:start', async (id, mode='exercise') => {
+    if(startingSession)throw new Error('正在打开，请稍候。');
+    startingSession=true;
+    try {
+    if(!['exercise','reading'].includes(mode))throw new Error('学习模式无效。');
+    if (selectionWindow || aiService.active || gradingBusy) throw new Error('请先结束截图或等待当前 AI 回复完成。');
+    let course = readCourses().find(item=>item.id===id);
+    if(mode==='reading'&&typeof id==='string'&&id.startsWith('document:')){const document=library.document(id.slice(9));course={id,title:document.name,questions:[],workTarget:{type:'file',filePath:document.file}};}
+    if(!course && !(id==null&&mode==='reading'))throw new Error('课程不存在。');
+    if(!course)course={id:'reading',title:'读写',questions:[],workTarget:{type:'builtin'}};
+    const target=mode==='reading'?await readingTarget(course):course;
+    if(!target)return {cancelled:true};
+    if(id==null){id='reading-'+createHash('sha256').update(path.resolve(target.workTarget.filePath).toLowerCase()).digest('hex');course={...course,id,title:path.basename(target.workTarget.filePath)};}
+    const readingFile=mode==='reading'?inspectDocument(target.workTarget.filePath):null;
+    const warning=mode==='reading'?'':await launchWorkTarget(target);
+    if(writerWindow&&!writerWindow.isDestroyed()){writerWindow.destroy();writerWindow=null;}
+    activeReading=readingFile;activeCourseId=id;activeCourse=course;sessionMode=mode;sessionId=randomUUID();exercise=new ExerciseSession(course);chatImages.clear();
+    overlayWindow.hide();
+    if(mode==='reading'||usesBuiltin(course))await openWriter();
+    sendSession(overlayWindow);
+    writerAIShown=false;if(!hasWriter())overlayWindow.show();mainWindow.hide();return {warning,mode,courseId:id};
+    } finally {startingSession=false;}
+  });
+  register('writer:open',()=>openWriter());
+  register('writer:aiState',()=>writerAIShown);
+  register('writer:toggleAI',input=>{
+    if(!activeCourse||!hasWriter()||input?.sessionId!==sessionId)throw new Error('当前学习会话已改变。');
+    if(selectionWindow)throw new Error('请先完成或取消截图。');
+    writerAIShown=!writerAIShown;writerWindow.webContents.send('writer:aiVisibility',writerAIShown);return writerAIShown;
+  });
+  register('reader:source',({sessionId:requested})=>{
+    if(sessionMode!=='reading'||!activeReading||requested!==sessionId)throw new Error('当前文件已改变。');
+    const info=inspectDocument(activeReading.file);return {kind:info.kind,extension:info.extension,mime:info.mime,bytes:fs.readFileSync(info.file)};
+  });
+  register('writer:load',()=>{
+    if(sessionMode==='reading'){
+      let annotations={pages:[],notes:[]};
+      try{annotations=JSON.parse(fs.readFileSync(writerFile(),'utf8'));}catch(e){
+        if(e.code!=='ENOENT')throw e;
+        const legacy=path.join(app.getPath('userData'),'writing',path.basename(writerFile()));
+        try{annotations.notes=normalizeWriterDocument(JSON.parse(fs.readFileSync(legacy,'utf8'))).pages;}catch(legacyError){if(legacyError.code!=='ENOENT')throw legacyError;}
+      }
+      return {...normalizeReadingAnnotations(annotations),courseId:activeCourseId,sessionMode,sessionId};
+    }
+    const file=writerFile();let document={pages:[]};
+    try{
+      const stored=JSON.parse(fs.readFileSync(file,'utf8'));document=normalizeWriterDocument(stored);
+      if(sessionMode==='exercise'&&Array.isArray(stored.questionIds)){document.pages=activeCourse.questions.map(q=>document.pages[stored.questionIds.indexOf(q.id)]||{strokes:[]});}
+      else document.pages=document.pages.slice(0,maxWriterPages());
+    }catch(e){if(e.code!=='ENOENT')throw e;}
+    return {...document,courseId:activeCourseId,sessionMode,sessionId};
+  });
+  register('writer:save',data=>{
+    if(!exercise||!data||data.sessionId!==sessionId)throw new Error('笔迹对应的课程已改变。');
+    const document=sessionMode==='reading'?normalizeReadingAnnotations(data):normalizeWriterDocument(data,maxWriterPages()),file=writerFile();
+    if(sessionMode==='exercise')document.questionIds=activeCourse.questions.map(q=>q.id);
+    fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file+'.tmp',JSON.stringify(document));fs.renameSync(file+'.tmp',file);return true;
+  });
+  register('writer:submit',input=>{
+    if(!exercise||selectionWindow||gradingBusy||aiService.active||input?.sessionId!==sessionId||(sessionMode==='reading'?(!Number.isInteger(input?.index)||input.index<0||input.index>=5000):input?.index!==exercise.index))throw new Error('当前无法提交此页，请确认题号。');
+    if(typeof input.image!=='string'||input.image.length>28*1024*1024||!/^data:image\/png;base64,[A-Za-z0-9+/=]+$/.test(input.image))throw new Error('画布图片无效。');
+    const image=nativeImage.createFromDataURL(input.image);if(image.isEmpty())throw new Error('画布图片无效。');
+    const bytes=image.toPNG();
+    if(sessionMode==='reading')return storeChatImage(bytes);
+    return applyProgress(exercise.saveScreenshot(input.index,bytes));
+  });
+  register('session:answer',({index,value,sessionId:answerSession})=>{
+    if(sessionMode!=='exercise'||!exercise||answerSession!==sessionId||selectionWindow||gradingBusy)throw new Error('当前无法保存作答。');
+    return applyProgress(exercise.saveResponse(index,value));
   });
   register('session:resume', () => {
     if (!activeCourseId) throw new Error('没有进行中的练习。');
-    overlayWindow.show(); mainWindow.hide(); return true;
+    if(hasWriter()){writerWindow.show();restoreChat();}else overlayWindow.show(); mainWindow.hide(); return true;
   });
   function applyProgress(progress) {
     overlayWindow.webContents.send('session:progress', progress);
+    if(writerWindow&&!writerWindow.isDestroyed())writerWindow.webContents.send('session:progress',progress);
     if (progress.submit) {
-      overlayWindow.hide(); mainWindow.show(); mainWindow.focus();
-      mainWindow.webContents.send('session:submit', activeCourseId, { screenshots: exercise.previews(), captured: progress.captured });
+      overlayWindow.hide(); if(writerWindow&&!writerWindow.isDestroyed())writerWindow.hide(); mainWindow.show(); mainWindow.focus();
+      mainWindow.webContents.send('session:submit', activeCourseId, { screenshots: exercise.previews(), captured: progress.captured, responses:progress.responses, typedAnswers:exercise.typedAnswers() });
     }
     return progress;
   }
   register('session:navigate', (index) => {
-    if (!exercise || selectionWindow || gradingBusy) throw new Error('当前无法切换题目。');
+    if (sessionMode!=='exercise' || !exercise || selectionWindow || gradingBusy) throw new Error('当前无法切换题目。');
     return applyProgress(exercise.navigate(index));
   });
   register('session:finish', () => {
-    if (!exercise || selectionWindow || gradingBusy) throw new Error('当前无法完成题目。');
+    if (sessionMode!=='exercise' || !exercise || selectionWindow || gradingBusy) throw new Error('当前无法完成题目。');
     return applyProgress(exercise.finish());
   });
   register('session:pause', () => {
-    overlayWindow.hide(); mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send('session-paused');
+    overlayWindow.hide(); if(writerWindow&&!writerWindow.isDestroyed())writerWindow.hide(); mainWindow.show(); mainWindow.focus(); mainWindow.webContents.send('session-paused',pausedState());
     return true;
   });
   register('capture:start', (purpose) => beginCapture(purpose));
@@ -302,18 +434,7 @@ app.whenReady().then(() => {
     const height = Math.min(size.height - y, Math.floor(Number(rect?.height) * scaleY));
     if (![x, y, width, height].every(Number.isFinite) || width < 20 || height < 20) throw new Error('请框选更大的截图区域。');
     const bytes = captureImage.crop({ x, y, width, height }).toPNG();
-    if (captureQuestion.purpose === 'chat') {
-      if (bytes.length > 20 * 1024 * 1024) throw new Error('截图超过 20 MB，请缩小区域。');
-      const id = randomUUID();
-      const folder = path.join(app.getPath('userData'), 'chat-images');
-      fs.mkdirSync(folder, { recursive: true });
-      const file = path.join(folder, `${id}.png`);
-      fs.writeFileSync(file, bytes);
-      chatImages.set(id, { file, courseId: activeCourseId, index: exercise.index });
-      overlayWindow.webContents.send('chat:capture', { id, image: `data:image/png;base64,${bytes.toString('base64')}`, number: exercise.index + 1 });
-      selectionWindow.close();
-      return { chat: true };
-    }
+    if (captureQuestion.purpose === 'chat') {const result=storeChatImage(bytes);selectionWindow.close();return result;}
     const progress = exercise.saveScreenshot(captureQuestion.index, bytes);
     applyProgress(progress);
     selectionWindow.close();
@@ -333,7 +454,7 @@ app.whenReady().then(() => {
     await shell.openExternal(`codex://threads/${encodeURIComponent(pending.threadId)}`);
   }));
   register('codex:ask', async ({ question, message, attachmentIds = [] }) => {
-    if(!activeCourse||!exercise)throw new Error('请先开始做题。');
+    if(!activeCourse||!exercise)throw new Error('请先进入做题或读写模式。');
     if (!Array.isArray(attachmentIds) || attachmentIds.length > 4) throw new Error('每条消息最多附 4 张截图。');
     const files = attachmentIds.map(id => {
       const image = chatImages.get(id);
@@ -342,7 +463,7 @@ app.whenReady().then(() => {
     });
     const text=String(question||message||'').trim().slice(0,2500);
     if(!text)throw new Error('请输入问题。');
-    return aiService.chat({scope:'exercise',courseId:activeCourseId,question:text,message:explainPrompt(activeCourse.questions[exercise.index].text,text),files,onUpdate:text=>overlayWindow.webContents.send('codex:answer',text)});
+    return aiService.chat({scope:sessionMode==='reading'?'reading':'exercise',courseId:activeCourseId,question:text,message:explainPrompt(sessionMode==='reading'?'':questionText(activeCourse.questions[exercise.index]),text),files,onUpdate:text=>sendChat('codex:answer',text)});
   });
   register('lesson:ask', ({ courseId, context, question }) => {
     if(!readCourses().some(c=>c.id===courseId))throw new Error('课程不存在。');
@@ -350,14 +471,14 @@ app.whenReady().then(() => {
   });
   register('submission:grade', async ({ courseId, threadId, answerInput }) => {
     if (gradingBusy) throw new Error('AI 正在批改，请稍候。');
-    if (courseId !== activeCourseId) throw new Error('当前练习已变更，请重新进入提交页。');
+    if (sessionMode!=='exercise' || courseId !== activeCourseId) throw new Error('当前练习已变更，请重新进入提交页。');
     const course = activeCourse;
     if (!course) throw new Error('没有可批改的练习。');
     if(aiService.active)throw new Error('上一条 AI 消息仍在处理中。');
     const config=aiSettings.read();
     gradingBusy = true;
     try {
-      const bundle = prepareGrading({ course, answerInput, screenshots: exercise.answers(), root: path.join(app.getPath('userData'), 'grading') });
+      const bundle = prepareGrading({ course, answerInput, screenshots: exercise.answers(), typedAnswers:exercise.typedAnswers(), root: path.join(app.getPath('userData'), 'grading') });
       let message=bundle.prompt,files=[];
       if(config.mode==='api'||config.harness.kind==='http'){
         const manifest=JSON.parse(fs.readFileSync(path.join(bundle.folder,'批改材料.json'),'utf8'));
@@ -374,10 +495,11 @@ app.whenReady().then(() => {
   });
   register('submission:export', async (answerInput) => {
     const course = activeCourse;
-    if (!course) throw new Error('没有可提交的练习。');
-    const screenshot = answerInput?.kind === 'screenshots';
+    if (!course || sessionMode!=='exercise') throw new Error('没有可提交的练习。');
+    const typedAnswers=exercise.typedAnswers();
+    const screenshot = ['screenshots','responses'].includes(answerInput?.kind) || (!answerInput && typedAnswers.length>0);
     const answerPath = typeof answerInput === 'string' ? answerInput : answerInput?.path;
-    if (screenshot && !exercise?.answers().length) throw new Error('截图已失效，请重新截图。');
+    if (screenshot && !exercise?.answers().length && !typedAnswers.length) throw new Error('截图已失效，请重新截图。');
     if (!screenshot && (!answerPath || !fs.existsSync(answerPath))) throw new Error('请先选择已完成的作答文件。');
     const output = await dialog.showOpenDialog(mainWindow, { title: '选择批改包保存位置', properties: ['openDirectory', 'createDirectory'] });
     if (output.canceled) return null;
@@ -390,8 +512,8 @@ app.whenReady().then(() => {
     if (screenshot) for (const item of answers) fs.writeFileSync(path.join(folder, item.fileName), item.bytes);
     else fs.copyFileSync(answerPath, path.join(folder, answerName));
     const manifest = answers.map(({bytes,...item})=>item);
-    fs.writeFileSync(path.join(folder, '作答对应.json'), JSON.stringify({ courseId: course.id, answerFile: answerName, answers: manifest }, null, 2));
-    const html = renderSubmission(course, new Date().toLocaleString('zh-CN'), answerName, manifest);
+    fs.writeFileSync(path.join(folder, '作答对应.json'), JSON.stringify({ courseId: course.id, answerFile: answerName, answers: manifest, responses:typedAnswers }, null, 2));
+    const html = renderSubmission(course, new Date().toLocaleString('zh-CN'), answerName, manifest, typedAnswers);
     fs.writeFileSync(path.join(folder, '批改材料.html'), html, 'utf8');
     copyMathAssets(folder);
     // Keep this submission available for optional AI grading after export.

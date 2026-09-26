@@ -28,7 +28,7 @@ async function main() {
     let list = await page.evaluate(() => window.study.listCourses());
     assert.equal(list.length, 1);
     assert(!JSON.stringify(list).includes('PRIVATE_ANSWER'));
-    assert.deepEqual(list[0].workTarget, { type: 'file', filePath: '' });
+    assert.deepEqual(list[0].workTarget, { type: 'default' });
     await page.getByRole('button', { name: '开始学习' }).click();
     await page.getByRole('heading', { name: '定义', exact: true }).waitFor();
     await page.getByRole('button', { name: '下一小节' }).click();

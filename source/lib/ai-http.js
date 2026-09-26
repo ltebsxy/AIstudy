@@ -14,7 +14,7 @@ async function askHTTP(config,secret,{message,files=[],history=[],signal,session
   const url=api?config.api.baseUrl.replace(/\/chat\/completions$/,'')+'/chat/completions':config.harness.endpoint;
   if(!url)throw new Error('请在设置中填写 Harness 桥接地址。');
   const previous=history.map(x=>({role:x.role,content:content(x.prompt||x.text,(x.files||[]).filter(f=>fs.existsSync(f)))}));
-  const body=api?{model:config.api.model,messages:[{role:'system',content:API_SYSTEM_PROMPT},...previous,{role:'user',content:content(message,files)}],stream:false}:{sessionId:sessionId||config.harness.sessionId,message,attachments:files.map(file=>({name:path.basename(file),...filePart(file)})),history:previous};
+  const body=api?{model:config.api.model,messages:[{role:'system',content:config.api.systemPrompt??API_SYSTEM_PROMPT},...previous,{role:'user',content:content(message,files)}],stream:false}:{sessionId:sessionId||config.harness.sessionId,message,attachments:files.map(file=>({name:path.basename(file),...filePart(file)})),history:previous};
   let response;
   try {response=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json',...(secret?{Authorization:`Bearer ${secret}`}:{})},body:JSON.stringify(body),redirect:'error',signal:AbortSignal.any([signal||new AbortController().signal,AbortSignal.timeout(300000)])});}
   catch(e){if(signal?.aborted)throw new Error('已停止等待。');throw new Error(e.name==='TimeoutError'?'接口响应超时。':'无法连接接口，请检查地址、网络及服务状态。');}

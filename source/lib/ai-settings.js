@@ -1,3 +1,4 @@
+const {API_SYSTEM_PROMPT}=require('./api-system-prompt');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
@@ -16,14 +17,15 @@ class AISettings {
   }
   public(config=this.read()) {
     const {encryptedKey,...api}=config.api;const {encryptedToken,...harness}=config.harness;
-    return {...config,api:{...api,hasKey:Boolean(encryptedKey)},harness:{...harness,hasToken:Boolean(encryptedToken)}};
+    return {...config,api:{systemPrompt:API_SYSTEM_PROMPT,...api,hasKey:Boolean(encryptedKey)},defaultSystemPrompt:API_SYSTEM_PROMPT,harness:{...harness,hasToken:Boolean(encryptedToken)}};
   }
   save(input) {
     const old=this.read();
     if(!['api','harness'].includes(input.mode))throw new Error('请选择 API 或 Harness。');
     const a=input.api||{},h=input.harness||{};
     if(!['deepseek','openai','custom'].includes(a.provider)||!['codex','http'].includes(h.kind))throw new Error('连接类型无效。');
-    const api={provider:a.provider,baseUrl:endpoint(a.baseUrl),model:String(a.model||'').trim().slice(0,160)};
+    if(a.systemPrompt!=null&&(typeof a.systemPrompt!=='string'||a.systemPrompt.length>20000))throw new Error('系统提示词请控制在 20000 字以内。');
+    const api={systemPrompt:a.systemPrompt??old.api.systemPrompt??API_SYSTEM_PROMPT,provider:a.provider,baseUrl:endpoint(a.baseUrl),model:String(a.model||'').trim().slice(0,160)};
     const harness={kind:h.kind,name:String(h.name||'').trim().slice(0,80),threadId:String(h.threadId||'').trim(),endpoint:endpoint(h.endpoint,true),sessionId:String(h.sessionId||'study').trim().slice(0,160)};
     if(harness.threadId&&!/^[0-9a-f-]{20,}$/i.test(harness.threadId))throw new Error('Codex 任务 ID 无效。');
     const secret=(plain,remove,previous,same)=>{

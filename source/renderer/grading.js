@@ -58,7 +58,7 @@ function setupSubmissionGrading(courseId, getAnswer) {
   function setBusy(value) {
     busy = value;
     card.querySelectorAll('input,select,button').forEach((element) => { if (element !== cancel) element.disabled = value; });
-    for (const id of ['nav-home', 'nav-create', 'nav-settings']) document.getElementById(id).disabled = value;
+    for (const id of ['nav-home', 'nav-settings']) document.getElementById(id).disabled = value;
     cancel.hidden = !value; cancel.disabled = false;
     submit.textContent = value ? 'AI 正在批改…' : mode === 'ai' ? '开始 AI 批改' : '生成批改包';
     if (!value) submit.disabled = !getAnswer();

@@ -1,10 +1,11 @@
 @echo off
 setlocal
-set "STUDY_APP=%~dp0app\win-unpacked\StudyDesk.exe"
-if not exist "%STUDY_APP%" (
-  echo StudyDesk.exe was not found. Keep Start.cmd next to the app folder.
+set "STUDY_SOURCE=%~dp0source"
+set "STUDY_RUNTIME=%STUDY_SOURCE%\node_modules\electron\dist\electron.exe"
+if not exist "%STUDY_RUNTIME%" (
+  echo Dependencies are missing. Run npm ci in the source folder first.
   pause
   exit /b 1
 )
-start "" /D "%~dp0app\win-unpacked" "%STUDY_APP%"
+start "" /D "%STUDY_SOURCE%" "%STUDY_RUNTIME%" "%STUDY_SOURCE%"
 exit /b 0

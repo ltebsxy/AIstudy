@@ -1,43 +1,31 @@
 const view = document.getElementById('view');
 const toast = document.getElementById('toast');
 let courses = [];
+let libraryState = null;
 let draft = null;
 let currentCourseId = null;
 let answerFile = '';
 let targetDrafts = {};
 let toastTimer;
+let lastSessionMode = 'exercise';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const byId = (id) => courses.find((course) => course.id === id);
 function notify(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 3500); }
-function nav(which) { disposeLessonChat(); document.getElementById('nav-home').classList.toggle('active', which === 'home'); document.getElementById('nav-create').classList.toggle('active', which === 'editor'); document.getElementById('nav-settings').classList.toggle('active',which==='settings'); }
-function errorMessage(error) { notify(error?.message || String(error)); }
+function nav(which) { disposeLessonChat(); document.getElementById('nav-home').classList.toggle('active', which === 'home'); document.getElementById('nav-settings').classList.toggle('active',which==='settings'); }
+function friendlyError(error) { return (error?.message || String(error)).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''); }
+function errorMessage(error) { notify(friendlyError(error)); }
 
-async function refresh() { courses = await window.study.listCourses(); renderHome(); }
-function renderHome() {
-  nav('home');
-  const cards = courses.map((course) => `<article class="course-card"><div class="card-top"><div class="card-icon">▧</div><button class="icon-button edit" data-id="${esc(course.id)}" title="编辑">⋯</button></div><h3>${esc(course.title)}</h3><p>${esc(course.description || '从知识点开始，循序渐进地练习。')}</p><div class="card-footer"><span>${course.questions.length} 道题目</span><button class="link-button open" data-id="${esc(course.id)}">开始学习 →</button></div></article>`).join('');
-  view.innerHTML = `<div class="content"><header class="toolbar"><div><div class="eyebrow">MY LEARNING SPACE</div><h1 class="page-title">我的学习空间</h1><p class="subtitle">选一个课程，从知识点开始。</p></div><button class="btn btn-primary" id="create-btn">＋ 新建课程</button></header><section class="hero"><div><div class="eyebrow">A LITTLE PROGRESS EVERY DAY</div><h2>今天，学一点新知识。</h2><p>阅读、练习、提交，让每一步都清晰可见。</p></div><div class="hero-badge">✎</div></section><div class="section-heading"><h2>全部课程</h2><span>共 ${courses.length} 个</span></div>${courses.length ? `<div class="grid">${cards}</div>` : `<div class="empty"><div class="empty-icon">▧</div><h3>还没有课程</h3><p>添加知识点和题目，开始第一段学习。</p><button class="btn btn-soft" id="empty-create">创建第一个课程</button></div>`}</div>`;
-  document.getElementById('create-btn').onclick = () => renderEditor();
-  const imports = document.createElement('div');
-  imports.className = 'course-imports';
-  imports.innerHTML = '<button class="btn btn-plain" id="import-course-file">导入课程文件</button><span>导入后可编辑做题软件；已有课程会保留。</span>';
-  view.querySelector('.section-heading').before(imports);
-  document.getElementById('import-course-file').onclick = async () => {
-    try { const course = await window.study.importCourseFile(); if (course) { await refresh(); notify('课程已导入，可编辑做题软件。'); } }
-    catch (e) { errorMessage(e); }
-  };
-  document.getElementById('empty-create')?.addEventListener('click', () => renderEditor());
-  view.querySelectorAll('.open').forEach((button) => button.onclick = () => renderLesson(button.dataset.id));
-  view.querySelectorAll('.edit').forEach((button) => button.onclick = () => renderEditor(button.dataset.id));
-}
+async function refresh() { [courses,libraryState] = await Promise.all([window.study.listCourses(),window.study.library()]); renderHome(); }
 
 function questionMarkup(question, index) {
-  return `<div class="question-editor" data-index="${index}"><div class="question-head"><span>题目 ${String(index + 1).padStart(2, '0')}</span><button class="icon-button remove-question" title="删除题目">×</button></div><div class="field"><textarea class="question-text" placeholder="输入题目内容，支持文字与图片">${esc(question.text)}</textarea></div><div class="image-row"><button class="btn btn-plain choose-image">${question.image ? '更换图片' : '＋ 添加图片'}</button>${question.image ? `<img class="image-preview" src="${question.image}" alt="题目图片"><button class="link-button clear-image">移除</button>` : '<span class="filename">可选；PNG / JPG / WebP / GIF</span>'}</div></div>`;
+  const type = question.type || 'written';
+  const controls = type === 'choice' ? `<div class="field"><label>选项（每行一个，不必填写 A、B 编号）</label><textarea class="question-options" rows="4" placeholder="第一个选项&#10;第二个选项">${esc((question.options || ['', '']).join('\n'))}</textarea><label class="question-multiple-label"><input type="checkbox" class="question-multiple" ${question.multiple ? 'checked' : ''}>允许多选</label></div>` : type === 'blank' ? `<div class="field"><label>填空标签（每行一个，按题干顺序）</label><textarea class="question-blanks" rows="2" placeholder="第 1 空&#10;第 2 空">${esc((question.blanks || ['答案']).join('\n'))}</textarea></div>` : '';
+  return `<div class="question-editor" data-index="${index}"><div class="question-head"><span>题目 ${String(index + 1).padStart(2, '0')}</span><select class="question-type" aria-label="第 ${index + 1} 题类型">${[['written','解答题'],['choice','选择题'],['blank','填空题']].map(([value,label])=>`<option value="${value}" ${type===value?'selected':''}>${label}</option>`).join('')}</select><button class="icon-button remove-question" title="删除题目">×</button></div><div class="field"><textarea class="question-text" placeholder="输入题目内容，支持文字与图片">${esc(question.text)}</textarea></div>${controls}<div class="image-row"><button class="btn btn-plain choose-image">${question.image ? '更换图片' : '＋ 添加图片'}</button>${question.image ? `<img class="image-preview" src="${question.image}" alt="题目图片"><button class="link-button clear-image">移除</button>` : '<span class="filename">可选；PNG / JPG / WebP / GIF</span>'}</div></div>`;
 }
 function renderEditor(id) {
   nav('editor');
-  draft = id ? structuredClone(byId(id)) : { title: '', description: '', knowledge: '', questions: [{ text: '', image: '' }], workTarget: { type: 'file', filePath: '' } };
+  draft = id ? structuredClone(byId(id)) : { title: '', description: '', knowledge: '', questions: [{ text: '', image: '' }], workTarget: { type: 'default' } };
   draft.workTarget ||= { type: 'file', filePath: draft.workFile || '' };
   delete draft.workFile;
   targetDrafts = { [draft.workTarget.type]: structuredClone(draft.workTarget) };
@@ -50,13 +38,24 @@ function syncEditor() {
   draft.knowledge = document.getElementById('knowledge')?.value ?? draft.knowledge;
   draft.knowledgeFormat = document.getElementById('knowledge-sections')?.checked ? 'sections' : undefined;
   if (draft.workTarget.type === 'onenote') draft.workTarget.url = document.getElementById('onenote-url')?.value ?? draft.workTarget.url;
-  view.querySelectorAll('.question-editor').forEach((row) => { draft.questions[Number(row.dataset.index)].text = row.querySelector('.question-text').value; });
+  view.querySelectorAll('.question-editor').forEach((row) => {
+    const question = draft.questions[Number(row.dataset.index)];
+    question.text = row.querySelector('.question-text').value;
+    question.type = row.querySelector('.question-type').value;
+    if (row.querySelector('.question-options')) question.options = row.querySelector('.question-options').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if (row.querySelector('.question-multiple')) question.multiple = row.querySelector('.question-multiple').checked;
+    if (row.querySelector('.question-blanks')) question.blanks = row.querySelector('.question-blanks').value.split('\n').map(s=>s.trim()).filter(Boolean);
+  });
 }
 function workTargetMarkup() {
   const target = draft.workTarget;
-  const tabs = [['file', '默认应用打开文件'], ['onenote', 'OneNote'], ['app', '指定程序']].map(([type, label]) => `<button type="button" class="target-tab ${target.type === type ? 'selected' : ''}" data-type="${type}">${label}</button>`).join('');
+  const tabs = [['default', '使用默认程序'], ['builtin', '内置写字板'], ['file', '默认应用打开文件'], ['onenote', 'OneNote'], ['app', '指定程序']].map(([type, label]) => `<button type="button" class="target-tab ${target.type === type ? 'selected' : ''}" data-type="${type}">${label}</button>`).join('');
   let details;
-  if (target.type === 'onenote') {
+  if (target.type === 'default') {
+    details = '<p class="target-help">使用设置中的默认写字程序；未配置时使用内置写字板。</p>';
+  } else if (target.type === 'builtin') {
+    details = '<p class="target-help">直接使用内置写字板，支持手写、橡皮、撤销和自动保存。未设置外部工具时默认使用。</p>';
+  } else if (target.type === 'onenote') {
     details = `<div class="field"><label for="onenote-url">OneNote 页面链接</label><input id="onenote-url" placeholder="onenote:https://..." value="${esc(target.url || '')}"><p class="target-help">在 OneNote 中右键页面，选择“复制指向页面的链接”，粘贴以 onenote: 开头的客户端链接。</p></div>`;
   } else if (target.type === 'app') {
     details = `<div class="field"><label>做题程序</label><div class="file-row"><button class="btn btn-plain" id="choose-app">选择 .exe 程序</button><span class="filename">${esc(target.appPath || '尚未选择')}</span>${target.appPath ? '<button class="link-button" id="clear-app">移除</button>' : ''}</div></div><div class="field target-extra"><label>交给程序打开的文件 <span class="hint">可选</span></label><div class="file-row"><button class="btn btn-plain" id="choose-app-file">选择文件</button><span class="filename">${esc(target.filePath || '尚未选择')}</span>${target.filePath ? '<button class="link-button" id="clear-app-file">移除</button>' : ''}</div></div>`;
@@ -79,7 +78,7 @@ function drawEditor() {
   view.querySelectorAll('.question-editor textarea').forEach((textarea) => StudyMath.editor(textarea));
   if (editing) {
     const hint = document.createElement('p'); hint.className = 'target-help';
-    hint.textContent = '已有批改参考会随原题保留；修改题干或图片后，该题旧参考将清除。';
+    hint.textContent = '已有批改参考会随原题保留；修改题干、图片或题型选项后，该题旧参考将清除。';
     document.getElementById('question-list').before(hint);
   }
   view.querySelector('.toolbar .subtitle').textContent = '添加知识点与题目，并选择做题软件。';
@@ -99,10 +98,11 @@ function drawEditor() {
   document.getElementById('clear-app')?.addEventListener('click', () => { syncEditor(); draft.workTarget.appPath = ''; drawEditor(); });
   document.getElementById('choose-app-file')?.addEventListener('click', async () => { try { syncEditor(); const file = await window.study.chooseWorkFile(); if (file) { draft.workTarget.filePath = file; drawEditor(); } } catch (e) { errorMessage(e); } });
   document.getElementById('clear-app-file')?.addEventListener('click', () => { syncEditor(); draft.workTarget.filePath = ''; drawEditor(); });
-  document.getElementById('save-course').onclick = async () => { try { syncEditor(); await window.study.saveCourse(draft); await refresh(); notify('课程已保存。'); } catch (e) { errorMessage(e); } };
+  document.getElementById('save-course').onclick = async () => { try { syncEditor(); const saved=await window.study.saveCourse(draft); if(!draft.id)await window.study.assignFolder({kind:'course',id:saved.id,...libraryLocation()}); await window.study.selectFolder({...libraryLocation(),mode:'study'}); await refresh(); notify('课程已保存。'); } catch (e) { errorMessage(e); } };
   document.getElementById('delete-course')?.addEventListener('click', async () => { if (!confirm('确定删除这个课程和其中的题目吗？')) return; try { await window.study.deleteCourse(draft.id); await refresh(); notify('课程已删除。'); } catch (e) { errorMessage(e); } });
   view.querySelectorAll('.question-editor').forEach((row) => {
     const index = Number(row.dataset.index);
+    row.querySelector('.question-type').onchange = () => { syncEditor(); drawEditor(); };
     row.querySelector('.remove-question').onclick = () => { syncEditor(); draft.questions.splice(index, 1); if (!draft.questions.length) draft.questions.push({ text: '', image: '' }); drawEditor(); };
     row.querySelector('.choose-image').onclick = async () => { try { syncEditor(); const image = await window.study.chooseImage(); if (image) { draft.questions[index].image = image.data; drawEditor(); } } catch (e) { errorMessage(e); } };
     row.querySelector('.clear-image')?.addEventListener('click', () => { syncEditor(); draft.questions[index].image = ''; drawEditor(); });
@@ -114,15 +114,34 @@ function renderLesson(id) {
   currentCourseId = id; nav('home');
   view.innerHTML = `<div class="content"><button class="back" id="back-home">← 返回课程列表</button><header class="toolbar"><div><div class="eyebrow">STEP 01 / KNOWLEDGE</div><h1 class="page-title">${esc(course.title)}</h1><p class="subtitle">先理解知识点，再动手练习。</p></div></header><div class="lesson-layout"><article class="lesson-card"><div class="eyebrow">知识点介绍</div><div class="lesson-content">${esc(course.knowledge)}</div><div class="lesson-meta"><button class="btn btn-primary" id="finish-lesson">完成，开始做题 →</button></div></article><aside class="side-note"><div class="number">${String(course.questions.length).padStart(2, '0')}</div><h3>道练习题</h3><p>完成阅读后，右下角会出现题目悬浮窗。你可以在其他应用中作答。</p></aside></div></div>`;
   document.getElementById('back-home').onclick = renderHome;
-  document.getElementById('finish-lesson').onclick = async () => { try { const result = await window.study.startSession(id); if (result.warning) notify(result.warning); } catch (e) { errorMessage(e); } };
+  document.getElementById('finish-lesson').onclick = () => startCourseMode(id, 'exercise');
   setupLessonChat(course);
   setupLessonReader(course);
 }
 
-document.getElementById('nav-home').onclick = renderHome;
-document.getElementById('nav-create').onclick = () => renderEditor();
+async function startCourseMode(id, mode) {
+  try {
+    const result = await window.study.startSession(id, mode);
+    if (result?.cancelled) return;
+    currentCourseId = result.courseId || id; lastSessionMode = mode;
+    if (result?.warning) notify(result.warning);
+  } catch (e) { errorMessage(e); }
+}
+
+document.getElementById('nav-home').onclick = () => setLibraryView({mode:'study'});
 window.study.onSubmit((id, options) => renderSubmit(id, options));
-window.study.onPaused(() => { notify('练习已暂停，截图已保留。'); const button=document.getElementById('finish-lesson'); if(button){button.textContent='继续做题 →';button.onclick=()=>window.study.resumeSession().catch(errorMessage);} });
+window.study.onPaused((state) => {
+  const mode = state?.mode || lastSessionMode;
+  if (state?.courseId) currentCourseId = state.courseId;
+  notify(mode === 'reading' ? '读写已暂停。' : '练习已暂停，作答已保留。');
+  const button = document.getElementById(mode === 'reading' ? 'start-reading' : 'finish-lesson');
+  if (button) { button.textContent = mode === 'reading' ? '继续读写 →' : '继续做题 →'; button.onclick = () => window.study.resumeSession().catch(errorMessage); }
+  else {
+    document.getElementById('resume-session')?.remove();
+    const resume = document.createElement('button'); resume.id = 'resume-session'; resume.className = 'btn btn-soft'; resume.textContent = mode === 'reading' ? '继续读写 →' : '继续做题 →';
+    resume.onclick = () => window.study.resumeSession().catch(errorMessage); view.querySelector('.toolbar')?.append(resume);
+  }
+});
 refresh().catch(errorMessage);
 
 document.getElementById('nav-settings').onclick=()=>renderSettings();

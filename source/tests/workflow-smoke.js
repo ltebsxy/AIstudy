@@ -6,14 +6,15 @@ const {_electron}=require('playwright-core');
 const {normalizeCourse}=require('../lib/model');
 async function main(){
   const root=path.resolve(__dirname,'..'),temp=fs.mkdtempSync(path.join(os.tmpdir(),'study-workflow-'));
-  const course=normalizeCourse({title:'逐题练习',knowledgeFormat:'sections',knowledge:'## 映射\n每个输入有唯一输出。\n## 定义域\n定义域是允许的输入集合。',questions:[{text:'第一个问题 $x^2$'},{text:'第二个问题 $x+1$'},{text:'第三个问题 $x-1$'}]});
+  const course=normalizeCourse({title:'逐题练习',workTarget:{type:'file',filePath:'synthetic-test.txt'},knowledgeFormat:'sections',knowledge:'## 映射\n每个输入有唯一输出。\n## 定义域\n定义域是允许的输入集合。',questions:[{text:'第一个问题 $x^2$'},{text:'第二个问题 $x+1$'},{text:'第三个问题 $x-1$'}]});
   fs.writeFileSync(path.join(temp,'courses.json'),JSON.stringify([course]));
   const app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:temp}});
   try{
     await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');
     let page,overlay;for(const p of app.windows()){if(await p.title()==='知序学习')page=p;else overlay=p;}
     const errors=[];page.on('pageerror',e=>errors.push(e.message));overlay.on('pageerror',e=>errors.push(e.message));
-    await app.evaluate(({ipcMain})=>{
+    await app.evaluate(({ipcMain,shell})=>{
+      shell.openPath=async()=>'';
       ipcMain.removeHandler('codex:list');ipcMain.handle('codex:list',()=>[{id:'11111111-1111-1111-1111-111111111111',title:'学习测试'}]);
       ipcMain.removeHandler('lesson:ask');ipcMain.handle('lesson:ask',(_event,input)=>{globalThis.__lessonInput=input;return '定义域是允许输入的集合，例如 $x\\ge0$。';});
     });
@@ -31,9 +32,10 @@ async function main(){
     await page.screenshot({path:path.join(root,'.tmp','lesson-ai.png')});
     await page.getByRole('button',{name:'关闭提问'}).click();
     await page.getByRole('button',{name:'完成，开始做题'}).click();
+    await overlay.getByText('第一个问题',{exact:false}).waitFor();
     const visible=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='知序学习').isVisible());
     async function capture(number,width,cancel=false){
-      const pending=app.waitForEvent('window');await overlay.getByRole('button',{name:'截图',exact:false}).click();const cap=await pending;
+      const pending=app.waitForEvent('window',{predicate:async p=>{await p.waitForLoadState();return await p.title()==='框选截图';}});await overlay.getByRole('button',{name:'截图',exact:false}).click();const cap=await pending;
       await cap.getByText('框选需要提交的作答区域').waitFor();
       if(cancel){const closed=cap.waitForEvent('close');await cap.keyboard.press('Escape').catch(e=>{if(!cap.isClosed())throw e;});await closed;return;}
       await cap.mouse.move(100,150);await cap.mouse.down();await cap.mouse.move(100+width,240);await cap.mouse.up();
