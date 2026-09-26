@@ -20,7 +20,7 @@
 
 [下载 Windows 64 位安装包（0.1.2）](https://github.com/ltebsxy/AIstudy/releases/download/v0.1.2/StudyDesk-Setup-0.1.2.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v0.1.2)
 
-下载后运行安装包即可，无需安装 Node.js。私有仓库需要登录有访问权限的 GitHub 账号才能下载。
+下载后运行安装包即可，无需安装 Node.js。仓库已公开，可直接下载，无需登录 GitHub。
 
 ## 启动与构建
 
