@@ -32,6 +32,8 @@ npm run dist
 
 ## AI 连接
 
+面向使用者的完整操作及“将本段复制给 Codex”指令见 [接入说明](../README.md#接入-codex-等-harness)。当前仅测试 Codex（GPT 模型）；其他 Harness 的 HTTP 桥接尚未验证。
+
 API 使用兼容 Chat Completions 的 `POST /chat/completions`，Key 在主进程解密。聊天与批改的用户材料只在触发对应操作时发送。连接设置保存在本机，不随构建打包。
 
 HTTP Harness 接收 `POST` JSON：`{ sessionId, message, attachments, history }`，返回 `{ "reply": "回复文本" }`。可配置独立的 Bearer 令牌。附件包含文件名与 data URL；桥接服务负责适配目标代理。
