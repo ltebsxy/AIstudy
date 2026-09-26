@@ -12,6 +12,8 @@ renderer/vendor/
 *.blockmap
 *.asar
 # Local credentials and personal data
+/source/lib/courses/
+/source/docs/COURSE_*.md
 .env
 .env.*
 !.env.example
