@@ -1,0 +1,40 @@
+function aiConnectionLabel(config) {
+  return StudyAI.label(config);
+}
+async function renderSettings(options={}) {
+  nav('settings');
+  view.innerHTML='<div class="content"><h1 class="page-title">设置</h1><p>正在读取设置…</p></div>';
+  let config;try{config=await window.study.getAISettings();}catch(e){errorMessage(e);return;}
+  if(!document.getElementById('nav-settings').classList.contains('active'))return;
+  view.innerHTML=`<div class="content settings-page"><button class="back" id="settings-back">← ${options.exercise?'返回做题':'返回课程'}</button><h1 class="page-title">设置</h1><p class="subtitle">API 和 Harness 分开配置，聊天与批改使用当前选中的方式。</p><div class="connection-mode"><label><input type="radio" name="ai-mode" value="api" ${config.mode==='api'?'checked':''}> API</label><label><input type="radio" name="ai-mode" value="harness" ${config.mode==='harness'?'checked':''}> Harness</label></div>
+  <section class="editor-card settings-section"><h2>API</h2><div class="api-template-row"><span>快速配置</span>${StudyAI.templates.map(t=>`<button class="btn btn-soft" data-api-template="${esc(t.id)}">${esc(t.name)}</button>`).join('')}</div><div class="form-grid"><div class="field"><label for="api-provider">服务商</label><select id="api-provider"><option value="deepseek">DeepSeek</option><option value="openai">OpenAI</option><option value="custom">自定义兼容接口</option></select></div><div class="field"><label for="api-url">接口地址（Base URL）</label><input id="api-url" value="${esc(config.api.baseUrl)}" placeholder="https://api.deepseek.com"></div><div class="field"><label for="api-model">模型</label><input id="api-model" value="${esc(config.api.model)}" placeholder="填写服务商提供的模型 ID"></div><div class="field"><label for="api-key">API Key</label><input id="api-key" type="password" autocomplete="new-password" placeholder="${config.api.hasKey?'已保存，留空保留':'填写 API Key'}"><label class="settings-check"><input type="checkbox" id="clear-api-key">清除已保存的 Key</label></div></div><p class="target-help">支持 Chat Completions 兼容接口。截图和 PDF 批改需所选模型支持对应文件输入。</p></section>
+  <section class="editor-card settings-section"><h2>Harness</h2><div class="field"><label for="harness-kind">代理连接</label><select id="harness-kind"><option value="codex">Codex</option><option value="http">自定义 Harness（HTTP 桥接）</option></select></div><div id="codex-fields"><div class="field"><label for="settings-thread">Codex 任务</label><div class="settings-task-row"><select id="settings-thread"><option value="${esc(config.harness.threadId)}">${config.harness.threadId?'已保存的任务 · '+esc(config.harness.threadId.slice(0,8)):'请选择任务'}</option></select><button class="btn btn-plain" id="refresh-settings-tasks">刷新任务</button></div></div><p class="target-help">沿用本机 Codex 连接；桌面自动转发需要从 Codex 启动软件。</p></div><div id="http-fields"><div class="form-grid"><div class="field"><label for="harness-name">Harness 名称</label><input id="harness-name" value="${esc(config.harness.name||'')}" placeholder="例如：OpenCode"></div><div class="field"><label for="harness-url">桥接地址</label><input id="harness-url" value="${esc(config.harness.endpoint)}" placeholder="http://127.0.0.1:8000/chat"></div><div class="field"><label for="harness-session">会话 ID</label><input id="harness-session" value="${esc(config.harness.sessionId)}"></div><div class="field"><label for="harness-token">访问令牌（可选）</label><input id="harness-token" type="password" autocomplete="new-password" placeholder="${config.harness.hasToken?'已保存，留空保留':'独立于 API Key'}"><label class="settings-check"><input type="checkbox" id="clear-harness-token">清除已保存的令牌</label></div></div><details class="target-help"><summary>桥接协议</summary><p>软件向该地址 POST JSON：{ sessionId, message, attachments, history }。服务返回 { "reply": "回复文本" }。需由桥接服务对接对应 Harness。</p></details></div></section><p class="target-help">密钥在本机加密保存。切换接口地址后需重新填写该地址的密钥。</p><div id="settings-status" role="status"></div><button class="btn btn-primary" id="save-settings">保存设置</button></div>`;
+  const $=id=>document.getElementById(id);
+  $('api-provider').value=config.api.provider;$('harness-kind').value=config.harness.kind;
+  const showKind=()=>{$('codex-fields').hidden=$('harness-kind').value!=='codex';$('http-fields').hidden=$('harness-kind').value!=='http';};showKind();$('harness-kind').onchange=showKind;
+  $('settings-back').onclick=()=>options.exercise?window.study.resumeSession():renderHome();
+  $('api-provider').onchange=()=>{const preset={deepseek:'https://api.deepseek.com',openai:'https://api.openai.com/v1'}[$('api-provider').value];if(preset)$('api-url').value=preset;$('api-model').value='';$('api-key').value='';};
+  async function tasks(){
+    const button=$('refresh-settings-tasks');button.disabled=true;
+    try{const items=await window.study.listCodexThreads();if(!$('settings-thread'))return;const select=$('settings-thread'),current=select.value;select.replaceChildren(new Option('请选择任务',''));for(const item of items)select.add(new Option(item.title,item.id));if(current&&!items.some(x=>x.id===current))select.add(new Option('已保存的任务',current));select.value=current;}
+    catch(e){if($('settings-status'))$('settings-status').textContent=e.message;}finally{if(button.isConnected)button.disabled=false;}
+  }
+  $('refresh-settings-tasks').onclick=tasks;
+  document.querySelectorAll('[data-api-template]').forEach(button=>button.onclick=()=>{
+    const template=StudyAI.templates.find(t=>t.id===button.dataset.apiTemplate);
+    if($('api-url').value.trim().replace(/\/+$/,'')!==template.baseUrl)$('api-key').value='';
+    $('api-provider').value=template.provider;$('api-url').value=template.baseUrl;$('api-model').value=template.model;
+    $('clear-api-key').checked=false;document.querySelector('[name="ai-mode"][value="api"]').checked=true;
+    $('settings-status').textContent='已填入 '+template.modelName+' 模板，填写 API Key 后保存。';$('api-key').focus();
+  });
+  $('save-settings').onclick=async()=>{
+    $('save-settings').disabled=true;
+    try{
+      config=await window.study.saveAISettings({mode:document.querySelector('[name="ai-mode"]:checked').value,api:{provider:$('api-provider').value,baseUrl:$('api-url').value.trim(),model:$('api-model').value.trim(),apiKey:$('api-key').value.trim(),clearKey:$('clear-api-key').checked},harness:{kind:$('harness-kind').value,name:$('harness-name').value.trim(),threadId:$('settings-thread').value,endpoint:$('harness-url').value.trim(),sessionId:$('harness-session').value,token:$('harness-token').value.trim(),clearToken:$('clear-harness-token').checked}});
+      if(!$('save-settings'))return;
+      $('api-key').value='';$('harness-token').value='';$('clear-api-key').checked=false;$('clear-harness-token').checked=false;
+      $('api-key').placeholder=config.api.hasKey?'已保存，留空保留':'填写 API Key';$('harness-token').placeholder=config.harness.hasToken?'已保存，留空保留':'独立于 API Key';
+      $('settings-status').textContent='已保存，当前使用 '+aiConnectionLabel(config)+'。';
+    }catch(e){if($('settings-status'))$('settings-status').textContent=e.message;}finally{if($('save-settings'))$('save-settings').disabled=false;}
+  };
+}

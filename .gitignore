@@ -1,0 +1,34 @@
+# Dependencies and build outputs
+node_modules/
+/app/
+release/
+dist/
+output/
+tmp/
+.tmp/
+renderer/vendor/
+*.log
+*.exe
+*.blockmap
+*.asar
+# Local credentials and personal data
+.env
+.env.*
+!.env.example
+ai-settings.json*
+preferences.json*
+courses.json*
+courses-before-*.json*
+desktop-pending.json*
+chats/
+chat-images/
+captures/
+submissions/
+userData/
+study-desk/
+*.pem
+*.key
+*.pfx
+.codex/
+.DS_Store
+Thumbs.db

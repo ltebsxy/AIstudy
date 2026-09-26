@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'">
+  <title>框选截图</title>
+  <link rel="stylesheet" href="capture.css">
+</head>
+<body>
+  <img id="screen-image" alt="当前屏幕">
+  <div class="shade"></div>
+  <div id="selection"></div>
+  <div class="capture-toolbar"><strong>框选需要提交的作答区域</strong><span>拖动鼠标框选，Esc 取消</span><button id="cancel">取消</button><button id="confirm" disabled>使用这张截图</button></div>
+  <script src="capture.js"></script>
+</body>
+</html>

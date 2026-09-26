@@ -1,0 +1,18 @@
+.ai-compose-actions{display:flex;align-items:stretch;gap:8px;flex-shrink:0;min-width:0}
+.ai-compose-actions .ai-mode-select{flex:1;min-width:0;width:0;border:1px solid #dce6df;border-radius:9px;background:#f7faf7;color:#315e52;padding:8px 10px;font:12px "Microsoft YaHei UI","Segoe UI",sans-serif;text-overflow:ellipsis;cursor:pointer}
+.ai-compose-actions .ai-mode-select:focus-visible{outline:2px solid #6ea28e;outline-offset:1px}
+.ai-compose-actions .ai-mode-select:disabled{opacity:.55;cursor:default}
+.ai-compose-actions button{flex:none;min-width:78px}
+.chat-compose{flex-direction:column;flex-shrink:0}
+.chat-compose .ai-compose-actions button{min-height:34px}
+.api-template-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:20px}
+.api-template-row span{font-size:12px;color:#74877e}
+.ai-chat-tools{display:flex;align-items:center;gap:10px;flex-shrink:0;min-width:0}
+.ai-chat-tools .ai-mode-select{flex:1;min-width:0;border:1px solid #dce6df;border-radius:8px;background:#f7faf7;color:#315e52;padding:8px;font:12px "Microsoft YaHei UI",sans-serif;cursor:pointer}
+.compact-button{flex:none;align-self:flex-start;border:1px solid #dce6df;border-radius:8px;background:#fff;color:#3b7263;padding:8px 10px;font:12px "Microsoft YaHei UI",sans-serif;cursor:pointer;white-space:nowrap}
+.compact-button:disabled{opacity:.5;cursor:default}
+.lesson-ai .compact-button{padding:4px 8px;font-size:11px}
+.chat-subtitle{line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;max-height:78px;overflow:auto;flex-shrink:0}
+.chat-compose .ai-compose-actions{justify-content:flex-end}
+.context-actions{display:flex;gap:8px;flex-shrink:0}
+.ai-chat-tools{gap:6px}.ai-chat-tools .compact-button{padding:8px 7px;font-size:11px}.ai-chat-tools .ai-mode-select{text-overflow:ellipsis}
