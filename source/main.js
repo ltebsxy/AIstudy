@@ -1,19 +1,24 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-if (process.env.STUDY_DATA_DIR) {
-  fs.mkdirSync(process.env.STUDY_DATA_DIR, { recursive: true });
-  app.setPath('userData', process.env.STUDY_DATA_DIR);
-}
+// Keep the existing data and Chromium storage after changing the product name.
+const userDataPath=process.env.STUDY_DATA_DIR||path.join(app.getPath('appData'),'study-desk');
+fs.mkdirSync(userDataPath,{recursive:true});
+app.setPath('userData',userDataPath);
+app.setPath('sessionData',userDataPath);
+app.setName('AI-StudyDesk');
 
-if(process.platform==='win32')app.setAppUserModelId('local.studydesk.app');
+// Do not let the source app inherit the installed release's cached taskbar icon.
+const taskbarAppId=app.isPackaged?'local.studydesk.app':'local.studydesk.source';
+if(process.platform==='win32')app.setAppUserModelId(taskbarAppId);
 const codexContextKeys=['CODEX_APP_TOOLS_PIPE_PATH','CODEX_THREAD_ID','CODEX_HOME','CODEX_MCP_NODE_PATH'];
 const codexContext=Object.fromEntries(codexContextKeys.filter(key=>process.env[key]).map(key=>[key,process.env[key]]));
 if(!app.requestSingleInstanceLock({codex:codexContext})){app.quit();return;}
-const appIcon=app.isPackaged?path.join(process.resourcesPath,'icon.ico'):path.join(__dirname,'assets','icon.ico');
+const {resolveAppIcon}=require('./lib/app-icon');
+const appIcon=resolveAppIcon(app.isPackaged?path.join(process.resourcesPath,'icon.ico'):path.join(__dirname,'assets','icon.ico'),userDataPath);
 function applyAppIdentity(win){
   win.setIcon(appIcon);
-  if(process.platform==='win32')win.setAppDetails({appId:'local.studydesk.app',appIconPath:appIcon,appIconIndex:0,relaunchDisplayName:'知序学习',relaunchCommand:app.isPackaged?'"'+process.execPath+'"':'"'+process.execPath+'" "'+__dirname+'"'});
+  if(process.platform==='win32')win.setAppDetails({appId:taskbarAppId,appIconPath:appIcon,appIconIndex:0,relaunchDisplayName:'AI-StudyDesk',relaunchCommand:app.isPackaged?'"'+process.execPath+'"':'"'+process.execPath+'" "'+__dirname+'"'});
 }
 app.on('browser-window-created',(_event,win)=>applyAppIdentity(win));
 app.on('second-instance',(_event,_argv,_cwd,additionalData)=>{
@@ -184,7 +189,7 @@ async function readingTarget(course) {
   return {...course,workTarget:target.type==='app'&&target.appPath?{...target,filePath:file}:{type:'file',filePath:file}};
 }
 function createWindows() {
-  mainWindow = new BrowserWindow({ title:'知序学习', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
+  mainWindow = new BrowserWindow({ title:'AI-StudyDesk', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
   const homeLoaded=mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; if (writerWindow && !writerWindow.isDestroyed()) writerWindow.destroy(); if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); });
   const area = screen.getPrimaryDisplay().workArea;

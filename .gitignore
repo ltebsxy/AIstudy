@@ -14,6 +14,7 @@ renderer/vendor/
 # Local credentials and personal data
 /source/lib/courses/
 /source/docs/COURSE_*.md
+/source/assets/mascot/
 .env
 .env.*
 !.env.example

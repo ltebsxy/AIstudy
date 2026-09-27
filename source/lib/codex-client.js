@@ -118,7 +118,7 @@ class CodexClient {
       child.stderr.on('data', (chunk) => { errorText = (errorText + chunk.toString()).slice(-2000); });
       child.on('error', (error) => { if (this.process === child) this.failAll(error); });
       child.on('exit', (code) => { if (this.process === child) this.failAll(new Error(`Codex 连接已退出 (${code})。${errorText ? ` ${errorText}` : ''}`)); });
-      await this.request('initialize', { clientInfo: { name: 'study_desk', title: '知序学习', version: '0.3.0' } });
+      await this.request('initialize', { clientInfo: { name: 'ai-studydesk', title: 'AI-StudyDesk', version: require('../package.json').version } });
       this.send({ method: 'initialized', params: {} });
     })();
     try { await this.starting; }

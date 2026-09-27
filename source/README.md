@@ -32,7 +32,7 @@ npm run smoke:writer-layout
 npm run smoke:loading
 ```
 
-日常修改不封装，根目录 Start.cmd 直接启动源码；仅用户要求上传 GitHub 时运行 `npm run dist`。
+日常修改不封装，根目录 Start.cmd 直接启动源码；仅用户明确要求打包或上传 GitHub 时运行 `npm run dist`。
 
 界面测试需要 Windows 桌面会话。`npm run dist` 自动同步 KaTeX 与 PDF.js 资源，将便携目录和安装包输出到 `../app/`。KaTeX 本地文件与许可证由 `vendor:math` 从已安装依赖复制；不需要数学渲染 CDN。
 
@@ -90,7 +90,9 @@ Harness 存在诸多问题，建议不使用，目前暂不维护。设置中保
 
 启动时优先加载主页，再加载隐藏的题目窗口；主进程的数学导出模块在导出时才加载。主页从 HTML 首帧提供加载提示。同一个数据目录只运行一个实例，重复打开会恢复现有窗口；测试的 `STUDY_DATA_DIR` 仍可独立运行。先独立启动、随后从 Codex 启动时，只在内存接收必要的连接环境，保留已有有效连接，不写入启动文件或磁盘。
 
-所有窗口使用应用图标和统一的 Windows 任务栏标识。源码版使用 `assets/icon.ico`；构建时通过 `extraResources` 将图标复制到 `resources/icon.ico`，供 Windows 任务栏读取。
+所有窗口使用应用图标。源码版任务栏标识为 `local.studydesk.source`，安装版保留 `local.studydesk.app`，避免本地开发版与旧安装版的任务栏图标混用。源码图标位于 `assets/icon.ico`，构建时复制到 `resources/icon.ico`；启动时按图标内容生成独立缓存路径供 Windows 窗口与任务栏读取，避免旧图标缓存。
+
+应用品牌为 **AI-StudyDesk**。安装版内部应用标识和 `%APPDATA%\study-desk` 数据目录继续沿用，以保留已有课程、设置、聊天记录和侧边栏状态。`assets/icon.svg` 是图标原稿；在 `source/` 运行 `npm run icon` 可生成透明原稿 PNG、界面 PNG 和多尺寸 Windows ICO，无需封装。`scripts/create-shortcut.js` 可刷新本地源码版桌面快捷方式。设计说明见 [assets/README.md](assets/README.md)。
 
 课程列表使用 `courses:sync` 按文件版本复用前端数据；文件夹切换直接使用操作返回的索引，未变化时不重传题目和图片。外部修改课程文件后，下次刷新会重新载入。首次读取课程与读写原文件使用异步文件读取，避免阻塞主进程。
 

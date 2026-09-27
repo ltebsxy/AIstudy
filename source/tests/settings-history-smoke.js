@@ -13,7 +13,7 @@ async function main(){
  const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const json=JSON.parse(body);requests.push({url:req.url,auth:req.headers.authorization,body:json});res.setHeader('Content-Type','application/json');const answer=JSON.stringify(json).includes('压缩学习对话为')?'压缩摘要：已掌握定义，继续讨论反函数。':'API 回复 '+requests.length+'：$x^2$';res.end(JSON.stringify(req.url==='/agent'?{reply:'Harness 已回复'}:{choices:[{message:{content:answer}}]}));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
  let app;
- async function launch(){app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');for(const p of app.windows())if(await p.title()==='知序学习'){await p.getByText('我的学习空间',{exact:true}).waitFor();return p;}}
+ async function launch(){app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');for(const p of app.windows())if(await p.title()==='AI-StudyDesk'){await p.getByText('我的学习空间',{exact:true}).waitFor();return p;}}
  try{
   let page=await launch();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.getByRole('button',{name:'设置',exact:true}).click();

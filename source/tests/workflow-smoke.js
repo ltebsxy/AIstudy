@@ -11,7 +11,7 @@ async function main(){
   const app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:temp}});
   try{
     await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');
-    let page,overlay;for(const p of app.windows()){if(await p.title()==='知序学习')page=p;else overlay=p;}
+    let page,overlay;for(const p of app.windows()){if(await p.title()==='AI-StudyDesk')page=p;else overlay=p;}
     const errors=[];page.on('pageerror',e=>errors.push(e.message));overlay.on('pageerror',e=>errors.push(e.message));
     await app.evaluate(({ipcMain,shell})=>{
       shell.openPath=async()=>'';
@@ -33,7 +33,7 @@ async function main(){
     await page.getByRole('button',{name:'关闭提问'}).click();
     await page.getByRole('button',{name:'完成，开始做题'}).click();
     await overlay.getByText('第一个问题',{exact:false}).waitFor();
-    const visible=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='知序学习').isVisible());
+    const visible=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='AI-StudyDesk').isVisible());
     async function capture(number,width,cancel=false){
       const pending=app.waitForEvent('window',{predicate:async p=>{await p.waitForLoadState();return await p.title()==='框选截图';}});await overlay.getByRole('button',{name:'截图',exact:false}).click();const cap=await pending;
       await cap.getByText('框选需要提交的作答区域').waitFor();

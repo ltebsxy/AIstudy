@@ -17,7 +17,7 @@ async function main() {
     if (app.windows().length < 2) await app.waitForEvent('window', { timeout: 10000 });
     const windows = app.windows();
     const titled = await Promise.all(windows.map(async (window) => ({ window, title: await window.title() })));
-    const page = titled.find((item) => item.title === '知序学习')?.window;
+    const page = titled.find((item) => item.title === 'AI-StudyDesk')?.window;
     if (!page) throw new Error(`主窗口未打开：${titled.map((item) => item.title).join(', ')}`);
     await page.getByText('我的学习空间').waitFor();
     await page.screenshot({ path: path.join(screenshots, 'home.png') });

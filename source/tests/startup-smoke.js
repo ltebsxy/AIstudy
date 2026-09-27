@@ -12,6 +12,11 @@ async function main(){
   const page=app.windows().find(p=>p.url().endsWith('/index.html'))||await app.waitForEvent('window',{predicate:p=>p.url().endsWith('/index.html')});
   await page.getByText('我的学习空间',{exact:true}).waitFor();
   const homeMs=Math.round(performance.now()-start);
+  const identity=await app.evaluate(({app})=>({name:app.getName(),data:app.getPath('userData'),session:app.getPath('sessionData')}));
+  assert.deepEqual(identity,{name:'AI-StudyDesk',data,session:data});
+  assert.equal(await page.title(),'AI-StudyDesk');
+  assert.equal(await page.locator('.brand strong').innerText(),'AI-StudyDesk');
+  assert(await page.locator('.brand-mark').evaluate(img=>img.complete&&img.naturalWidth>0));
   const initial=await app.evaluate(({BrowserWindow,app})=>{
    const home=BrowserWindow.getAllWindows().find(w=>w.webContents.getURL().endsWith('/index.html'));
    globalThis.startupSecondLaunch=new Promise(resolve=>app.once('second-instance',()=>resolve()));

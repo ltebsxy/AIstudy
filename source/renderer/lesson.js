@@ -31,7 +31,7 @@ function setupLessonReader(course) {
   controls.append(label, select, progress); content.before(controls);
   const paging = document.createElement('div'); paging.className = 'reader-paging';
   const prev = document.createElement('button'); prev.className = 'btn btn-plain'; prev.textContent = '← 上一小节';
-  const next = document.createElement('button'); next.className = 'btn btn-soft'; next.textContent = '下一小节 →';
+  const next = document.createElement('button'); next.className = 'btn btn-plain'; next.textContent = '下一小节 →';
   paging.append(prev, next); content.after(paging);
   const heading = document.createElement('h2'); heading.className = 'reader-heading'; heading.tabIndex = -1;
   const body = document.createElement('div'); body.className = 'reader-body'; content.replaceChildren(heading, body);

@@ -69,7 +69,7 @@ class DesktopCodex {
   async start() {
     if (this.starting) return this.starting;
     if (this.child) return;
-    if (!this.available) throw new Error('桌面自动连接未就绪。请从 Codex 启动知序学习。');
+    if (!this.available) throw new Error('桌面自动连接未就绪。请从 Codex 启动 AI-StudyDesk。');
     this.starting = (async () => {
       const node = process.env.CODEX_MCP_NODE_PATH || process.execPath;
       const child = spawn(node, [this.server], { windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } });
@@ -84,7 +84,7 @@ class DesktopCodex {
       child.stderr.resume();
       child.on('error', () => { if (this.child === child) this.disconnect(); });
       child.on('exit', () => { if (this.child === child) this.disconnect(); });
-      await this.request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'study-desk', version: '0.3.1' } });
+      await this.request('initialize', { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'ai-studydesk', version: require('../package.json').version } });
       child.stdin.write(JSON.stringify({ jsonrpc: '2.0', method: 'notifications/initialized' }) + '\n');
       const { tools } = await this.request('tools/list', {});
       for (const name of ['read_thread', 'send_message_to_thread']) {
@@ -134,7 +134,7 @@ class DesktopCodex {
       if (state.cancelled) throw new Error('已停止发送。');
       if (!entry) {
         if (before.thread?.status?.type !== 'idle') throw new Error('这个 Codex 任务正在执行或需要处理，请结束后再发送。');
-        entry = { marker: `知序学习请求 ${randomUUID()}`, message: text };
+        entry = { marker: `AI-StudyDesk 请求 ${randomUUID()}`, message: text };
         this.remember(threadId, entry); // Journal before send: never retry an ambiguous write.
         try {
           await this.call('send_message_to_thread', { threadId, prompt: `[${entry.marker}]\n${text}` });
@@ -169,7 +169,7 @@ class DesktopCodex {
 
   disconnect() {
     this.child = null;
-    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Codex 桌面连接已断开，请从 Codex 重新打开知序学习。')); }
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.reject(new Error('Codex 桌面连接已断开，请从 Codex 重新打开 AI-StudyDesk。')); }
     this.pending.clear();
   }
 

@@ -12,7 +12,7 @@ async function main(){
  const app=await _electron.launch({executablePath:exe||require('electron'),args:exe?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});
  try{
   await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');
-  let page;for(const p of app.windows())if(await p.title()==='知序学习')page=p;
+  let page;for(const p of app.windows())if(await p.title()==='AI-StudyDesk')page=p;
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({ipcMain,app})=>{
    const id='11111111-1111-1111-1111-111111111111';

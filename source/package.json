@@ -1,6 +1,6 @@
 {
-  "name": "study-desk",
-  "version": "0.1.3",
+  "name": "ai-studydesk",
+  "version": "0.1.4",
   "private": true,
   "description": "本地学习与做题桌面软件",
   "main": "main.js",
@@ -24,7 +24,8 @@
     "smoke:writer": "node tests/infinite-writer-smoke.js",
     "smoke:writer-layout": "node tests/writer-layout-smoke.js",
     "smoke:loading": "node tests/loading-smoke.js",
-    "smoke:startup": "node tests/startup-smoke.js"
+    "smoke:startup": "node tests/startup-smoke.js",
+    "icon": "electron scripts/make-icon.js"
   },
   "devDependencies": {
     "electron": "44.4.5",
@@ -34,15 +35,16 @@
   },
   "build": {
     "appId": "local.studydesk.app",
-    "productName": "知序学习",
-    "executableName": "StudyDesk",
+    "productName": "AI-StudyDesk",
+    "executableName": "AI-StudyDesk",
     "files": [
       "main.js",
       "preload.js",
       "renderer/**/*",
       "lib/**/*",
       "!lib/courses{,/**/*}",
-      "package.json"
+      "package.json",
+      "assets/icon.png"
     ],
     "directories": {
       "output": "../app"
@@ -52,7 +54,7 @@
       "icon": "assets/icon.ico"
     },
     "nsis": {
-      "artifactName": "StudyDesk-Setup-${version}.${ext}",
+      "artifactName": "AI-StudyDesk-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
     },

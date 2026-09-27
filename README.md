@@ -1,4 +1,4 @@
-# AIstudy · 知序学习
+# AI-StudyDesk
 
 一个简单的 AI 学习与做题桌面软件，面向 Windows，无需登录软件账号。
 
@@ -18,7 +18,7 @@
 
 ## 下载安装
 
-[下载 Windows 64 位安装包（0.1.3）](https://github.com/ltebsxy/AIstudy/releases/download/v0.1.3/StudyDesk-Setup-0.1.3.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v0.1.3)
+[下载 Windows 64 位安装包（0.1.4）](https://github.com/ltebsxy/AIstudy/releases/download/v0.1.4/AI-StudyDesk-Setup-0.1.4.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v0.1.4)
 
 下载后运行安装包即可，无需安装 Node.js。仓库已公开，可直接下载，无需登录 GitHub。
 
@@ -36,13 +36,13 @@ npm run vendor:reader
 npm start
 ```
 
-日常双击根目录 **Start.cmd** 直接运行最新源码（需先安装上述依赖），无需重新封装。仅准备上传 GitHub 时构建 Windows 安装包（在 source 目录运行）：
+日常双击根目录 **Start.cmd** 直接运行最新源码（需先安装上述依赖），无需重新封装。明确需要安装包或准备上传 GitHub 时构建（在 source 目录运行）：
 
 ```powershell
 npm run dist
 ```
 
-封装版本可运行 `app/win-unpacked/StudyDesk.exe`；日常 **Start.cmd** 始终启动源码。安装包位于 `app/StudyDesk-Setup-0.1.3.exe`。
+从 **0.1.4** 起软件更名为 **AI-StudyDesk**，使用淡绿色书本与代码图标。程序名为 `AI-StudyDesk.exe`，安装包为 `AI-StudyDesk-Setup-0.1.4.exe`。源码使用 **Start.cmd** 启动，构建文件位于 `app/`。历史版本保留原下载文件名；已有用户数据目录继续沿用。
 
 ## 读写与作答
 
@@ -76,18 +76,18 @@ AI 调用会将本次问题、选取片段、相关历史及所附图片/文件�
 先安装并登录 Codex 桌面版。在一个用于启动软件的 Codex 任务中，完整复制并发送下面这段文字，无需填写 API Key 或连接参数：
 
 ```text
-请帮我启动 Windows 上的“知序学习”（StudyDesk），接入本机 Codex，完成以下步骤：
+请帮我启动 Windows 上的“AI-StudyDesk”，接入本机 Codex，完成以下步骤：
 
-1. 自动定位程序：优先检查当前项目根目录的 Start.cmd 和 app/win-unpacked/StudyDesk.exe；安装版可通过“知序学习”的快捷方式、正在运行的 StudyDesk.exe 路径或 Windows 安装信息定位。如果仍找不到，请让我选择程序文件。
+1. 自动定位程序：优先检查当前项目根目录的 Start.cmd 和 app/win-unpacked/AI-StudyDesk.exe；安装版可通过“AI-StudyDesk”的快捷方式、正在运行的 AI-StudyDesk.exe 路径或 Windows 安装信息定位。如果仍找不到，请让我选择程序文件。
 2. 检查你当前执行环境中的 CODEX_APP_TOOLS_PIPE_PATH、CODEX_THREAD_ID，以及桌面随附的 codex-app-tools 是否可用。只报告可用状态，连接信息仅用于本次进程继承。
-3. 如果知序学习已打开，提醒我保存未发送的草稿和进行中的练习，再正常退出旧进程。随后直接从你当前执行环境启动 Start.cmd 或 StudyDesk.exe，继承当前环境，避免重复启动多个实例。
-4. 验证桌面连接能够读取已有 Codex 任务。已有学习任务沿用原选择；尚未选择时，指导我在知序学习左下角“设置 → AI 设置”中选择 Harness → Codex → 刷新任务 → 选择学习任务 → 保存设置。学习任务应与当前负责启动软件的任务分开。
-5. 请让我从知序学习发送一条测试问题，并确认能收到回复。若连接不可用，说明具体原因和下一步；不要把手动复制发送的结果当成自动连接成功。
+3. 如果 AI-StudyDesk 已打开，提醒我保存未发送的草稿和进行中的练习，再正常退出旧进程。随后直接从你当前执行环境启动 Start.cmd 或 AI-StudyDesk.exe，继承当前环境，避免重复启动多个实例。
+4. 验证桌面连接能够读取已有 Codex 任务。已有学习任务沿用原选择；尚未选择时，指导我在 AI-StudyDesk 左下角“设置 → AI 设置”中选择 Harness → Codex → 刷新任务 → 选择学习任务 → 保存设置。学习任务应与当前负责启动软件的任务分开。
+5. 请让我从 AI-StudyDesk 发送一条测试问题，并确认能收到回复。若连接不可用，说明具体原因和下一步；不要把手动复制发送的结果当成自动连接成功。
 
 请保留现有课程、密钥和聊天记录；连接环境仅在运行时继承，不保存到启动文件或配置中。若需要新建学习任务，请先让我决定。
 ```
 
-设置保存后，在聊天窗口选择 **Codex** 即可提问。Codex 桌面版更新或重启后，如果自动连接失效，再复制上面这段文字，让它重新启动知序学习。普通双击启动知序学习可能缺少自动转发所需的环境，进入“在 Codex 中继续”的手动模式。
+设置保存后，在聊天窗口选择 **Codex** 即可提问。Codex 桌面版更新或重启后，如果自动连接失效，再复制上面这段文字，让它重新启动 AI-StudyDesk。普通双击启动 AI-StudyDesk 可能缺少自动转发所需的环境，进入“在 Codex 中继续”的手动模式。
 
 #### 其他 Harness（未验证）
 

@@ -17,3 +17,25 @@
 
 .harness-notice { display: grid; gap: 6px; padding: 12px 14px; border-left: 3px solid #bb8a44; border-radius: 8px; background: #fff8eb; color: #74551e; font-size: 13px; }
 .harness-notice span { font-size: 12px; }
+
+.brand { gap: 8px; padding: 8px 6px; margin-bottom: 10px; background: transparent; border-radius: 0; }
+.brand-mark { flex: none; width: 48px; height: 48px; object-fit: contain; background: transparent; border-radius: 0; }
+.brand strong { font-size: 15px; letter-spacing: 0; white-space: nowrap; }
+.nav-item:hover { background: #f2f2f2; color: #414141; }
+.nav-item.active, .nav-item.active:hover { background: #e6e6e6; color: #303030; }
+.library-modes, .library-layout { background: #f3f3f3; }
+.library-modes button, .library-layout button { color: #666; }
+.library-modes button:hover, .library-layout button:hover { background: #ebebeb; }
+.library-modes .selected, .library-modes .selected:hover,
+.library-layout button[aria-pressed=true], .library-layout button[aria-pressed=true]:hover { background: #dedede; color: #303030; box-shadow: none; }
+.library-table tbody tr:hover { background: #f3f3f3; }
+.library-table tbody tr.selected { background: #e6e6e6; }
+.reader-paging .btn { background: #f2f2f2; color: #414141; border: 1px solid #dedede; }
+.reader-paging .btn:hover:not(:disabled) { background: #e6e6e6; }
+.reader-paging .btn:disabled { background: #f7f7f7; color: #a3a3a3; border-color: #ececec; opacity: 1; }
+@media(max-width:1050px) {
+  .brand { gap: 6px; }
+  .brand-mark { width: 42px; height: 42px; }
+  .brand strong { font-size: 12px; }
+  .brand span { font-size: 6.5px; }
+}

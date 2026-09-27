@@ -12,7 +12,7 @@ async function main() {
   const app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:temp}});
   try {
     await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');
-    let page,overlay;for(const p of app.windows()){if(await p.title()==='知序学习')page=p;else overlay=p;}
+    let page,overlay;for(const p of app.windows()){if(await p.title()==='AI-StudyDesk')page=p;else overlay=p;}
     const errors=[],external=[];
     for(const p of [page,overlay]){p.on('pageerror',e=>errors.push(e.message));p.on('console',m=>{if(m.type()==='error')errors.push(m.text());});p.on('request',r=>{if(/^https?:/.test(r.url()))external.push(r.url());});}
     await page.getByRole('button',{name:'开始学习'}).click();

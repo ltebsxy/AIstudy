@@ -25,7 +25,7 @@ async function main(){
   async function launch(){
     app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});
     await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');
-    for(const p of app.windows()){const title=await p.title();if(title==='知序学习')page=p;if(title==='题目悬浮窗')overlay=p;}
+    for(const p of app.windows()){const title=await p.title();if(title==='AI-StudyDesk')page=p;if(title==='题目悬浮窗')overlay=p;}
     for(const p of [page,overlay])p.on('pageerror',e=>errors.push(e.message));
     await page.getByText('我的学习空间',{exact:true}).waitFor();
     await app.evaluate(({shell,desktopCapturer,nativeImage,screen})=>{
@@ -77,7 +77,7 @@ async function main(){
     await drawInk();const ink=await writer.evaluate(()=>window.study.writerLoad());assert(ink.pages[3].board.strokes[0].points.length>1);
     await writer.locator('#undo').click();await writer.getByText('已自动保存',{exact:true}).waitFor();assert.equal((await writer.evaluate(()=>window.study.writerLoad())).pages[3].board.strokes.length,0);
     await writer.locator('#redo').click();await writer.getByText('已自动保存',{exact:true}).waitFor();
-    await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='知序写字').close());
+    await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='AI-StudyDesk · 写字').close());
     await page.evaluate(()=>window.study.openWriter());await writer.screenshot({path:path.join(root,'.tmp','builtin-writer.png')});
     assert.equal((await writer.evaluate(()=>window.study.writerLoad())).pages[3].board.strokes.length,1);
     await captureAnswer(writer,app);await page.getByText('第 04 题 · 已截图',{exact:true}).waitFor();

@@ -16,7 +16,7 @@ async function main() {
     await app.firstWindow();
     if (app.windows().length < 2) await app.waitForEvent('window');
     const titles = await Promise.all(app.windows().map(async (page) => ({ page, title: await page.title() })));
-    const page = titles.find((item) => item.title === '知序学习').page;
+    const page = titles.find((item) => item.title === 'AI-StudyDesk').page;
     const overlay = titles.find((item) => item.title === '题目悬浮窗').page;
     const errors = []; page.on('pageerror', (e) => errors.push(e.message));
     await page.getByText('我的学习空间').waitFor();
