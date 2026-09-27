@@ -60,6 +60,8 @@ function requestPage(i){
   if(cache.has(i)||pending.has(i))return;pending.add(i);const version=generation;
   renderQueue=renderQueue.catch(()=>{}).then(async()=>{
     if(version!==generation)return;
+    const rect=StudyBoard.rect(board.file,i),v=board.viewport;
+    if(rect.y+rect.height<v.y||rect.y>v.y+screenHeight||rect.x+rect.width<v.x||rect.x>v.x+screenWidth){pending.delete(i);return;}
     const c=document.createElement('canvas');c.width=1000;c.height=1400;
     try{await StudyReader.render(i,c);if(version!==generation)return;cache.set(i,c);if(cache.size>12){const first=cache.keys().next().value;cache.delete(first);}invalidate();}
     catch(e){if(version===generation)status('文件显示失败：'+e.message);}

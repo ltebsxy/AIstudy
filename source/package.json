@@ -1,6 +1,6 @@
 {
   "name": "study-desk",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "private": true,
   "description": "本地学习与做题桌面软件",
   "main": "main.js",
@@ -22,7 +22,9 @@
     "vendor:reader": "node scripts/sync-reader-assets.js",
     "smoke:reader": "node tests/reader-smoke.js",
     "smoke:writer": "node tests/infinite-writer-smoke.js",
-    "smoke:writer-layout": "node tests/writer-layout-smoke.js"
+    "smoke:writer-layout": "node tests/writer-layout-smoke.js",
+    "smoke:loading": "node tests/loading-smoke.js",
+    "smoke:startup": "node tests/startup-smoke.js"
   },
   "devDependencies": {
     "electron": "44.4.5",
@@ -53,7 +55,13 @@
       "artifactName": "StudyDesk-Setup-${version}.${ext}",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "extraResources": [
+      {
+        "from": "assets/icon.ico",
+        "to": "icon.ico"
+      }
+    ]
   },
   "dependencies": {
     "katex": "0.18.9"

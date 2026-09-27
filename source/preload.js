@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('study', {
   assignFolder: input => ipcRenderer.invoke('library:assign',input),
   selectFolder: input => ipcRenderer.invoke('library:select',input),
   importPDF: input => ipcRenderer.invoke('library:importPDF',input),
+  syncCourses: (revision) => ipcRenderer.invoke('courses:sync', revision),
   listCourses: () => ipcRenderer.invoke('courses:list'),
   importCourseFile: () => ipcRenderer.invoke('courses:importFile'),
   saveCourse: (course) => ipcRenderer.invoke('courses:save', course),

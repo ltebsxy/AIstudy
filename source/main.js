@@ -1,6 +1,27 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+if (process.env.STUDY_DATA_DIR) {
+  fs.mkdirSync(process.env.STUDY_DATA_DIR, { recursive: true });
+  app.setPath('userData', process.env.STUDY_DATA_DIR);
+}
+
+if(process.platform==='win32')app.setAppUserModelId('local.studydesk.app');
+const codexContextKeys=['CODEX_APP_TOOLS_PIPE_PATH','CODEX_THREAD_ID','CODEX_HOME','CODEX_MCP_NODE_PATH'];
+const codexContext=Object.fromEntries(codexContextKeys.filter(key=>process.env[key]).map(key=>[key,process.env[key]]));
+if(!app.requestSingleInstanceLock({codex:codexContext})){app.quit();return;}
+const appIcon=app.isPackaged?path.join(process.resourcesPath,'icon.ico'):path.join(__dirname,'assets','icon.ico');
+function applyAppIdentity(win){
+  win.setIcon(appIcon);
+  if(process.platform==='win32')win.setAppDetails({appId:'local.studydesk.app',appIconPath:appIcon,appIconIndex:0,relaunchDisplayName:'知序学习',relaunchCommand:app.isPackaged?'"'+process.execPath+'"':'"'+process.execPath+'" "'+__dirname+'"'});
+}
+app.on('browser-window-created',(_event,win)=>applyAppIdentity(win));
+app.on('second-instance',(_event,_argv,_cwd,additionalData)=>{
+  desktopCodex.adoptContext(additionalData?.codex);
+  const windows=[selectionWindow,writerWindow,overlayWindow,mainWindow].filter(w=>w&&!w.isDestroyed());
+  const win=windows.find(w=>w.isVisible())||mainWindow;if(!win||win.isDestroyed())return;
+  if(win.isMinimized())win.restore();win.show();win.focus();
+});
 const { spawn } = require('node:child_process');
 const { randomUUID, createHash } = require('node:crypto');
 const { normalizeCourse, normalizeWorkTarget, renderSubmission, learnerCourse, preserveGrading, questionText } = require('./lib/model');
@@ -17,13 +38,10 @@ const { AIService } = require('./lib/ai-service');
 const { Library } = require('./lib/library');
 const { extensions:readingExtensions,inspectDocument,normalizeReadingAnnotations }=require('./lib/reading-document');
 
-if (process.env.STUDY_DATA_DIR) {
-  fs.mkdirSync(process.env.STUDY_DATA_DIR, { recursive: true });
-  app.setPath('userData', process.env.STUDY_DATA_DIR);
-}
 
 let mainWindow;
 let overlayWindow;
+let overlayReady;
 let selectionWindow;
 let writerWindow;
 let activeReading = null;
@@ -166,8 +184,8 @@ async function readingTarget(course) {
   return {...course,workTarget:target.type==='app'&&target.appPath?{...target,filePath:file}:{type:'file',filePath:file}};
 }
 function createWindows() {
-  mainWindow = new BrowserWindow({ width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
+  mainWindow = new BrowserWindow({ title:'知序学习', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
+  const homeLoaded=mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('closed', () => { mainWindow = null; if (writerWindow && !writerWindow.isDestroyed()) writerWindow.destroy(); if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); });
   const area = screen.getPrimaryDisplay().workArea;
   overlayWindow = new BrowserWindow({
@@ -176,7 +194,7 @@ function createWindows() {
     frame: false, show: false, resizable: true, alwaysOnTop: true, skipTaskbar: false,
     backgroundColor: '#ffffff', webPreferences: webPreferences(),
   });
-  overlayWindow.loadFile(path.join(__dirname, 'renderer', 'overlay.html'));
+  overlayReady=homeLoaded.then(()=>{if(overlayWindow&&!overlayWindow.isDestroyed())return overlayWindow.loadFile(path.join(__dirname,'renderer','overlay.html'));});
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu');
   overlayWindow.on('close', (event) => {
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -282,6 +300,12 @@ app.whenReady().then(() => {
     return result.canceled?null:library.importPDF(result.filePaths[0],input);
   });
   register('courses:list', () => readCourses().map(learnerCourse));
+  register('courses:sync', async knownRevision => {
+    const revision=()=>{try{const stat=fs.statSync(dataFile());return [stat.size,stat.mtimeMs,stat.ctimeMs,stat.ino].join(':');}catch(e){if(e.code==='ENOENT')return 'missing';throw e;}};
+    const before=revision();if(knownRevision===before)return {revision:before,courses:null};
+    let data=[];try{data=JSON.parse(await fs.promises.readFile(dataFile(),'utf8'));}catch(e){if(e.code!=='ENOENT')throw e;}
+    const after=revision();return {revision:before===after?after:null,courses:Array.isArray(data)?data.map(learnerCourse):[]};
+  });
   register('courses:importFile', async () => {
     const result = await dialog.showOpenDialog(mainWindow, { title: '导入课程 JSON', properties: ['openFile'], filters: [{ name: '课程 JSON', extensions: ['json'] }] });
     if (result.canceled) return null;
@@ -329,6 +353,7 @@ app.whenReady().then(() => {
     if(startingSession)throw new Error('正在打开，请稍候。');
     startingSession=true;
     try {
+    await overlayReady;
     if(!['exercise','reading'].includes(mode))throw new Error('学习模式无效。');
     if (selectionWindow || aiService.active || gradingBusy) throw new Error('请先结束截图或等待当前 AI 回复完成。');
     let course = readCourses().find(item=>item.id===id);
@@ -355,9 +380,11 @@ app.whenReady().then(() => {
     if(selectionWindow)throw new Error('请先完成或取消截图。');
     writerAIShown=!writerAIShown;writerWindow.webContents.send('writer:aiVisibility',writerAIShown);return writerAIShown;
   });
-  register('reader:source',({sessionId:requested})=>{
+  register('reader:source',async({sessionId:requested})=>{
     if(sessionMode!=='reading'||!activeReading||requested!==sessionId)throw new Error('当前文件已改变。');
-    const info=inspectDocument(activeReading.file);return {kind:info.kind,extension:info.extension,mime:info.mime,bytes:fs.readFileSync(info.file)};
+    const info=inspectDocument(activeReading.file),bytes=await fs.promises.readFile(info.file);
+    if(requested!==sessionId)throw new Error('当前文件已改变。');
+    return {kind:info.kind,extension:info.extension,mime:info.mime,bytes};
   });
   register('writer:load',()=>{
     if(sessionMode==='reading'){

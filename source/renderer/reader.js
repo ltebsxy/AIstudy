@@ -1,5 +1,8 @@
-import * as pdfjs from './vendor/pdfjs/pdf.mjs';
-pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdfjs/pdf.worker.mjs',import.meta.url).href;
+let pdfModule;
+async function pdfEngine(){
+  if(!pdfModule)pdfModule=import('./vendor/pdfjs/pdf.mjs').then(pdfjs=>{pdfjs.GlobalWorkerOptions.workerSrc=new URL('./vendor/pdfjs/pdf.worker.mjs',import.meta.url).href;return pdfjs;}).catch(e=>{pdfModule=null;throw e;});
+  return pdfModule;
+}
 let pdf=null,picture=null,textPages=[],kind='',loadingTask=null;
 function password(){
   return new Promise((resolve,reject)=>{
@@ -9,15 +12,15 @@ function password(){
     dialog.oncancel=()=>reject(new Error('已取消打开加密 PDF。'));dialog.showModal();input.focus();
   });
 }
-function paginate(bytes){
+async function paginate(bytes){
   let text;
   if(bytes[0]===255&&bytes[1]===254)text=new TextDecoder('utf-16le').decode(bytes);
   else if(bytes[0]===254&&bytes[1]===255)text=new TextDecoder('utf-16be').decode(bytes);
   else try{text=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{text=new TextDecoder('gb18030').decode(bytes);}
   text=text.replace(/\r\n?/g,'\n').replace(/\t/g,'    ').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f]/g,'');
   const context=document.createElement('canvas').getContext('2d');context.font='20px "Microsoft YaHei", sans-serif';
-  const widths=new Map(),lines=[];let line='',width=0;
-  for(const char of text){if(char==='\n'){lines.push(line);line='';width=0;continue;}
+  const widths=new Map(),lines=[];let line='',width=0,processed=0;
+  for(const char of text){if(++processed%32768===0)await new Promise(resolve=>setTimeout(resolve,0));if(char==='\n'){lines.push(line);line='';width=0;continue;}
     if(!widths.has(char))widths.set(char,context.measureText(char).width);
     const next=widths.get(char);if(width+next>900){lines.push(line);line='';width=0;}line+=char;width+=next;
     if(lines.length>200000)throw new Error('文本页数过多，请拆分文件。');
@@ -27,8 +30,9 @@ function paginate(bytes){
 window.StudyReader={
   async load(source){
     if(loadingTask){await loadingTask.destroy();loadingTask=null;pdf=null;}if(picture){picture.close();picture=null;}textPages=[];
-    kind=source.kind;const bytes=new Uint8Array(source.bytes);
+    kind=source.kind;const bytes=source.bytes instanceof Uint8Array?source.bytes:new Uint8Array(source.bytes);
     if(kind==='pdf'){
+      const pdfjs=await pdfEngine();
       loadingTask=pdfjs.getDocument({data:bytes,isEvalSupported:false,cMapUrl:new URL('./vendor/pdfjs/cmaps/',import.meta.url).href,cMapPacked:true,standardFontDataUrl:new URL('./vendor/pdfjs/standard_fonts/',import.meta.url).href,wasmUrl:new URL('./vendor/pdfjs/wasm/',import.meta.url).href,iccUrl:new URL('./vendor/pdfjs/iccs/',import.meta.url).href});
       let passwordError;
       loadingTask.onPassword=async update=>{try{update(await password());}catch(e){passwordError=e;loadingTask.destroy();}};
@@ -36,7 +40,7 @@ window.StudyReader={
       if(pdf.numPages>5000)throw new Error('PDF 超过 5000 页，请拆分文件。');return pdf.numPages;
     }
     if(kind==='image'){picture=await createImageBitmap(new Blob([bytes],{type:source.mime}));if(picture.width*picture.height>80000000){picture.close();throw new Error('图片像素过大，请先缩小图片。');}return 1;}
-    textPages=paginate(bytes);return Math.max(1,textPages.length);
+    textPages=await paginate(bytes);return Math.max(1,textPages.length);
   },
   async render(index,canvas){
     const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);

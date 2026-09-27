@@ -6,9 +6,9 @@ const { randomUUID } = require('node:crypto');
 
 // Uses the installed, unmodified app-tools MCP server and the executor context
 // inherited when Codex launches this app. Never persist or invent host context.
-function findDesktopServer() {
-  if (!process.env.CODEX_APP_TOOLS_PIPE_PATH || !process.env.CODEX_THREAD_ID) return null;
-  const root = path.join(process.env.CODEX_HOME || path.join(process.env.USERPROFILE || '', '.codex'), 'plugins', 'cache', 'openai-bundled', 'codex-app-tools');
+function findDesktopServer(env = process.env) {
+  if (!env.CODEX_APP_TOOLS_PIPE_PATH || !env.CODEX_THREAD_ID) return null;
+  const root = path.join(env.CODEX_HOME || path.join(env.USERPROFILE || '', '.codex'), 'plugins', 'cache', 'openai-bundled', 'codex-app-tools');
   if (!fs.existsSync(root)) return null;
   const files = fs.readdirSync(root, { withFileTypes: true }).filter((x) => x.isDirectory())
     .map((x) => path.join(root, x.name, 'server.mjs')).filter((x) => fs.existsSync(x));
@@ -44,6 +44,17 @@ class DesktopCodex {
   }
 
   get available() { return Boolean(this.server && this.callerId && process.env.CODEX_APP_TOOLS_PIPE_PATH); }
+
+  // A standalone launch can receive a later Codex launch's runtime context.
+  // Keep an existing connection intact and never persist the launch environment.
+  adoptContext(context) {
+    if(this.available||this.child||this.starting||this.active||!context)return false;
+    const keys=['CODEX_APP_TOOLS_PIPE_PATH','CODEX_THREAD_ID','CODEX_HOME','CODEX_MCP_NODE_PATH'];
+    const values=Object.fromEntries(keys.filter(key=>typeof context[key]==='string'&&context[key].length>0&&context[key].length<32768).map(key=>[key,context[key]]));
+    if(!values.CODEX_APP_TOOLS_PIPE_PATH||!values.CODEX_THREAD_ID)return false;
+    const server=findDesktopServer({...process.env,...values});if(!server)return false;
+    Object.assign(process.env,values);this.server=server;this.callerId=values.CODEX_THREAD_ID;return true;
+  }
 
   request(method, params, timeoutMs = 30000) {
     const id = ++this.nextId;

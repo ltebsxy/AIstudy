@@ -22,6 +22,7 @@ async function main(){
   await app.evaluate(({shell})=>{globalThis.writerURL='';shell.openExternal=async url=>{globalThis.writerURL=url;};});await page.evaluate(id=>window.study.startSession(id),course.id);assert.equal(await app.evaluate(()=>globalThis.writerURL),'onenote:https://example.com/test');await page.evaluate(()=>window.study.pauseSession());
   await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#open-writing-settings').click();await page.locator('#default-writer').waitFor();assert.equal(await page.locator('#default-writer').inputValue(),'onenote');await page.locator('#default-writer').selectOption('builtin');await page.locator('#save-writing-settings').click();await page.getByText('已保存默认写字程序。',{exact:true}).waitFor();await page.locator('#writing-back').click();
   await page.locator('#open-ai-settings').click();await page.locator('#api-url').waitFor();
+  await page.locator('.harness-notice').getByText('存在诸多问题，建议不使用',{exact:true}).waitFor();
   await page.getByRole('button',{name:'DeepSeek · V4.1 Flash',exact:true}).click();
   assert.equal(await page.locator('#api-url').inputValue(),'https://api.deepseek.com');assert.equal(await page.locator('#api-model').inputValue(),'deepseek-flash');assert(await page.locator('[name="ai-mode"][value="api"]').isChecked());
   await page.locator('#api-key').fill('temporary-template-key');await page.getByRole('button',{name:'DeepSeek · V4.1 Flash',exact:true}).click();assert.equal(await page.locator('#api-key').inputValue(),'temporary-template-key');
@@ -81,6 +82,9 @@ async function main(){
   const last=requests.at(-1);assert.equal(last.auth,'Bearer test-harness-token');assert.equal(last.body.sessionId,'test-session');assert.equal(last.body.history.length,0);assert(last.body.message.includes('代理问题'));
   const keyCheck=fs.readFileSync(path.join(data,'ai-settings.json'),'utf8');assert(!keyCheck.includes('test-api-secret')&&!keyCheck.includes('test-harness-token'));
   assert.equal(await page.locator('#lesson-ai-mode option[value="harness"]').innerText(),'OpenCode');await page.locator('#lesson-ai-mode').selectOption('api');await page.waitForFunction(()=>!document.querySelector('#lesson-ai-mode').disabled);
+  // This section tests the external-writer overlay; the built-in iframe is covered by writer-layout-smoke.
+  await app.evaluate(({shell})=>{shell.openExternal=async()=>{};});
+  await page.evaluate(()=>window.study.saveWritingSettings({type:'onenote',url:'onenote:https://example.com/test'}));
   await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
   let overlay;for(const p of app.windows())if(await p.title()==='题目悬浮窗')overlay=p;
   overlay.on('pageerror',e=>errors.push(e.message));

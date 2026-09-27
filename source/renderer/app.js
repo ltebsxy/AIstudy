@@ -1,6 +1,7 @@
 const view = document.getElementById('view');
 const toast = document.getElementById('toast');
 let courses = [];
+let courseRevision=null,refreshGeneration=0,openingSession=false;
 let libraryState = null;
 let draft = null;
 let currentCourseId = null;
@@ -16,7 +17,12 @@ function nav(which) { disposeLessonChat(); document.getElementById('nav-home').c
 function friendlyError(error) { return (error?.message || String(error)).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''); }
 function errorMessage(error) { notify(friendlyError(error)); }
 
-async function refresh() { [courses,libraryState] = await Promise.all([window.study.listCourses(),window.study.library()]); renderHome(); }
+async function refresh(nextLibrary) {
+  const generation=++refreshGeneration;
+  const [result,folders]=await Promise.all([window.study.syncCourses(courseRevision),nextLibrary||window.study.library()]);
+  if(generation!==refreshGeneration)return;
+  if(result.courses!==null)courses=result.courses;courseRevision=result.revision;libraryState=folders;renderHome();
+}
 
 function questionMarkup(question, index) {
   const type = question.type || 'written';
@@ -120,12 +126,17 @@ function renderLesson(id) {
 }
 
 async function startCourseMode(id, mode) {
+  if(openingSession)return;openingSession=true;
+  const buttons=[...view.querySelectorAll('.read-document,#finish-lesson')],labels=buttons.map(b=>[...b.childNodes]);
+  for(const b of buttons)b.disabled=true;
+  const current=buttons.find(b=>b.id==='finish-lesson'||'document:'+b.dataset.id===id);if(current){current.textContent='正在打开…';current.setAttribute('aria-busy','true');}
   try {
     const result = await window.study.startSession(id, mode);
     if (result?.cancelled) return;
     currentCourseId = result.courseId || id; lastSessionMode = mode;
     if (result?.warning) notify(result.warning);
   } catch (e) { errorMessage(e); }
+  finally{openingSession=false;buttons.forEach((b,i)=>{b.disabled=false;b.replaceChildren(...labels[i]);b.removeAttribute('aria-busy');});}
 }
 
 document.getElementById('nav-home').onclick = () => setLibraryView({mode:'study'});
@@ -142,7 +153,11 @@ window.study.onPaused((state) => {
     resume.onclick = () => window.study.resumeSession().catch(errorMessage); view.querySelector('.toolbar')?.append(resume);
   }
 });
-refresh().catch(errorMessage);
+function loadHome(){
+  view.innerHTML='<div class="content loading-state" role="status">正在加载学习空间…</div>';
+  refresh().catch(e=>{view.innerHTML='<div class="content loading-state"><p role="alert">学习空间加载失败，请重试。</p><button class="btn btn-soft" id="retry-home">重新加载</button></div>';document.getElementById('retry-home').onclick=loadHome;errorMessage(e);});
+}
+loadHome();
 
 document.getElementById('nav-settings').onclick=()=>renderSettings();
 window.study.onOpenSettings(options=>renderSettings(options));

@@ -2,6 +2,24 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { DesktopCodex } = require('../lib/desktop-codex');
 const id = '11111111-1111-1111-1111-111111111111';
+test('a later Codex launch can connect a standalone instance without persisting or replacing a live context',()=>{
+  const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
+  const keys=['CODEX_APP_TOOLS_PIPE_PATH','CODEX_THREAD_ID','CODEX_HOME','CODEX_MCP_NODE_PATH'];
+  const original=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'study-launch-context-'));
+  try{
+    for(const key of keys)delete process.env[key];
+    const client=new DesktopCodex();assert.equal(client.available,false);
+    assert.equal(client.adoptContext({CODEX_THREAD_ID:id}),false);
+    const server=path.join(root,'plugins','cache','openai-bundled','codex-app-tools','fixture','server.mjs');
+    fs.mkdirSync(path.dirname(server),{recursive:true});fs.writeFileSync(server,'// synthetic fixture; never executed');
+    const context={CODEX_APP_TOOLS_PIPE_PATH:'test-launch-pipe',CODEX_THREAD_ID:id,CODEX_HOME:root,STUDY_UNRELATED_LAUNCH_VALUE:'must-not-copy'};
+    assert.equal(client.adoptContext(context),true);assert.equal(client.available,true);assert.equal(client.server,server);
+    assert.equal(process.env.STUDY_UNRELATED_LAUNCH_VALUE,undefined);
+    assert.equal(client.adoptContext({...context,CODEX_THREAD_ID:'33333333-3333-3333-3333-333333333333'}),false);
+    assert.equal(client.callerId,id);assert.equal(client.child,null);
+  }finally{for(const key of keys){if(original[key]===undefined)delete process.env[key];else process.env[key]=original[key];}}
+});
 function fixture() {
   let journal = {};
   const client = new DesktopCodex({ pollMs: 1, loadJournal: () => structuredClone(journal), saveJournal: (value) => { journal = structuredClone(value); } });

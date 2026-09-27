@@ -1,13 +1,16 @@
 function libraryLocation() { const mode=libraryState.selection.mode;return {mode,...libraryState.views[mode]}; }
+let libraryNavigating=false;
 async function setLibraryView(change) {
-  try { await window.study.selectFolder({mode:change.mode||libraryLocation().mode,...change});await refresh(); }
+  if(libraryNavigating||!libraryState)return;libraryNavigating=true;
+  try { const state=await window.study.selectFolder({mode:change.mode||libraryLocation().mode,...change});await refresh(state); }
   catch(e){errorMessage(e);}
+  finally{libraryNavigating=false;}
 }
 function libraryDialog(title,fields,onSave){
   const dialog=document.createElement('dialog');dialog.className='library-dialog';
   dialog.innerHTML=`<form><h2>${esc(title)}</h2>${fields}<p class="dialog-error" role="status"></p><div class="dialog-actions"><button class="btn btn-plain" type="button" data-cancel>取消</button><button class="btn btn-primary" type="submit">保存</button></div></form>`;
   document.body.append(dialog);dialog.addEventListener('close',()=>dialog.remove());dialog.querySelector('[data-cancel]').onclick=()=>dialog.close();
-  dialog.querySelector('form').onsubmit=async event=>{event.preventDefault();const button=dialog.querySelector('[type="submit"]');button.disabled=true;try{await onSave(dialog);dialog.close();await refresh();}catch(e){dialog.querySelector('.dialog-error').textContent=friendlyError(e);}finally{button.disabled=false;}};
+  dialog.querySelector('form').onsubmit=async event=>{event.preventDefault();const button=dialog.querySelector('[type="submit"]');button.disabled=true;try{const state=await onSave(dialog);dialog.close();await refresh(state);}catch(e){dialog.querySelector('.dialog-error').textContent=friendlyError(e);}finally{button.disabled=false;}};
   dialog.showModal();return dialog;
 }
 function editFolder(item){
@@ -46,10 +49,10 @@ function renderHome(){
   view.querySelectorAll('[data-path]').forEach(button=>button.onclick=()=>setLibraryView({folderId:button.dataset.path}));
   view.querySelectorAll('[data-folder]').forEach(button=>button.onclick=()=>setLibraryView({folderId:button.dataset.folder}));
   view.querySelectorAll('[data-rename]').forEach(button=>button.onclick=()=>editFolder(folders.find(x=>x.id===button.dataset.rename)));
-  view.querySelectorAll('[data-delete]').forEach(button=>button.onclick=async()=>{try{await window.study.removeFolder({id:button.dataset.delete,mode:location.mode});await refresh();}catch(e){errorMessage(e);}});
+  view.querySelectorAll('[data-delete]').forEach(button=>button.onclick=async()=>{try{const state=await window.study.removeFolder({id:button.dataset.delete,mode:location.mode});await refresh(state);}catch(e){errorMessage(e);}});
   document.getElementById('new-folder').onclick=()=>editFolder();
   document.getElementById('new-course')?.addEventListener('click',()=>renderEditor());
-  document.getElementById('import-pdf')?.addEventListener('click',async()=>{try{if(await window.study.importPDF(location))await refresh();}catch(e){errorMessage(e);}});
+  document.getElementById('import-pdf')?.addEventListener('click',async()=>{try{const state=await window.study.importPDF(location);if(state)await refresh(state);}catch(e){errorMessage(e);}});
   document.getElementById('import-course-file')?.addEventListener('click',async()=>{try{const course=await window.study.importCourseFile();if(course){await window.study.assignFolder({kind:'course',id:course.id,...location});await refresh();}}catch(e){errorMessage(e);}});
   view.querySelectorAll('.open').forEach(button=>button.onclick=()=>renderLesson(button.dataset.id));
   view.querySelectorAll('.edit').forEach(button=>button.onclick=()=>renderEditor(button.dataset.id));

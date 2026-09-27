@@ -18,7 +18,7 @@
 
 ## 下载安装
 
-[下载 Windows 64 位安装包（0.1.2）](https://github.com/ltebsxy/AIstudy/releases/download/v0.1.2/StudyDesk-Setup-0.1.2.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v0.1.2)
+[下载 Windows 64 位安装包（0.1.3）](https://github.com/ltebsxy/AIstudy/releases/download/v0.1.3/StudyDesk-Setup-0.1.3.exe) · [版本说明](https://github.com/ltebsxy/AIstudy/releases/tag/v0.1.3)
 
 下载后运行安装包即可，无需安装 Node.js。仓库已公开，可直接下载，无需登录 GitHub。
 
@@ -42,7 +42,7 @@ npm start
 npm run dist
 ```
 
-封装版本可运行 `app/win-unpacked/StudyDesk.exe`；日常 **Start.cmd** 始终启动源码。安装包位于 `app/StudyDesk-Setup-0.1.2.exe`。
+封装版本可运行 `app/win-unpacked/StudyDesk.exe`；日常 **Start.cmd** 始终启动源码。安装包位于 `app/StudyDesk-Setup-0.1.3.exe`。
 
 ## 读写与作答
 
@@ -61,11 +61,13 @@ npm run dist
 
 - **API**：填写服务地址、模型和自己的 Key；可用 DeepSeek 模板快速填写地址与模型。模型是否支持截图或 PDF 取决于对应服务。
 - **系统提示词**：在 API 区域编辑，保存后下一次 API 请求生效；支持恢复默认。该设置不修改 Harness 代理自身的提示词。
-- **Harness**：单独选择 Codex 或 HTTP 桥接。Codex 需要本机已安装并登录，桌面自动转发需要从 Codex 启动本软件并继承当前连接环境。该桌面集成为实验功能，可能受版本与任务占用影响。
+- **Harness**：**存在诸多问题，建议不使用。目前暂不维护。** 可配置 Codex 或 HTTP 桥接，现有功能暂时保留。
 
 AI 调用会将本次问题、选取片段、相关历史及所附图片/文件发送到你配置的服务。AI 批改会发送本次批改材料；普通离线阅读和做题无需 AI。
 
 ### 接入 Codex 等 Harness
+
+> **存在诸多问题，建议不使用。Harness 目前暂不维护，以下接入说明仅供参考。**
 
 **目前仅测试过 Codex（GPT 模型）。** 其他 Harness 可使用 HTTP 桥接，兼容性尚未验证。本节指本机 Codex 桌面版；普通 ChatGPT 网页聊天无法替你启动本机软件。
 

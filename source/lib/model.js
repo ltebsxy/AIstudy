@@ -1,5 +1,4 @@
 const crypto = require('node:crypto');
-const math = require('../renderer/math');
 
 function cleanText(value, max = 20000) {
   return String(value ?? '').trim().slice(0, max);
@@ -130,6 +129,7 @@ function escapeHtml(value) {
 }
 
 function renderSubmission(course, submittedAt, answerFileName, answers = [], typedAnswers = []) {
+  const math = require('../renderer/math');
   const questionHtml = course.questions.map((question, index) => {
     const image = question.image ? `<img src="${question.image}" alt="第 ${index + 1} 题图片">` : '';
     const reference = question.grading ? `<details><summary>批改参考与评分依据（${question.grading.criteria.reduce((sum, item) => sum + item.points, 0)} 分）</summary><p>${math.html(question.grading.answer)}</p><ul>${question.grading.criteria.map((item) => `<li>${item.points} 分：${math.html(item.text)}</li>`).join('')}</ul><p>等价解法同样给分；按步骤给分，同一错误不重复扣分。无法辨认的作答标为待确认。</p></details>` : '';
