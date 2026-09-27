@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 ltebsxy
+// SPDX-License-Identifier: GPL-3.0-only
 const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('study', {
   getWritingSettings: () => ipcRenderer.invoke('writing:settings:get'),

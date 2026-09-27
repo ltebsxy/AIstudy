@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 ltebsxy
+// SPDX-License-Identifier: GPL-3.0-only
 const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');

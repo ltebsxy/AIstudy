@@ -1,5 +1,7 @@
 # 工程说明
 
+项目采用 **GPL-3.0-only**，见 [LICENSE](../LICENSE) 和 [第三方许可说明](../THIRD_PARTY_NOTICES.md)。安装包配置会把这两份文件复制到程序旁；发布页应提供与安装包对应的源码及构建说明。第三方文件保留其原许可，不能统一替换成 GPL 声明。
+
 ## 目录
 
 - `main.js` / `preload.js`：Electron 主进程和受限 IPC 桥接。
