@@ -44,13 +44,23 @@ const { ChatHistory } = require('./lib/chat-history');
 const { AIService } = require('./lib/ai-service');
 const { Library } = require('./lib/library');
 const { extensions:readingExtensions,inspectDocument,normalizeReadingAnnotations }=require('./lib/reading-document');
+const { ProgrammingWorkspaces, importFolder, validateFiles } = require('./lib/programming-workspace');
 
 
 let mainWindow;
 let overlayWindow;
+let externalExerciseExpanded=false;
+let externalExerciseBallPosition=null;
 let overlayReady;
 let selectionWindow;
 let writerWindow;
+let programmingChatWindow;
+let programmingCourseId = null;
+let programmingExternalActive = false;
+let programmingChatExpanded = false;
+let programmingBallPosition=null;
+let pendingProgrammingEdit = null;
+let pendingProgrammingSubmission = null;
 let activeReading = null;
 let sessionMode = 'exercise';
 let writerAIShown = false;
@@ -84,6 +94,7 @@ const aiService = new AIService(aiSettings, chatHistory, desktopCodex, codexClie
 const executableFolder=path.dirname(process.execPath);
 const libraryRoot=process.env.STUDY_DATA_DIR?path.join(app.getPath('userData'),'library'):app.isPackaged?path.join(path.basename(executableFolder)==='win-unpacked'?path.dirname(executableFolder):executableFolder,'data'):path.resolve(__dirname,'../app/data');
 const library=new Library(libraryRoot);
+const programmingWorkspaces=new ProgrammingWorkspaces(app.getPath('userData'));
 function dataFile() { return path.join(app.getPath('userData'), 'courses.json'); }
 function readPreferences() {
   try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'preferences.json'), 'utf8')); }
@@ -112,7 +123,130 @@ function writeCourses(courses) {
   fs.renameSync(temp, file);
 }
 function trusted(event) {
-  return [mainWindow, overlayWindow, selectionWindow, writerWindow].some((win) => win && !win.isDestroyed() && win.webContents === event.sender);
+  return [mainWindow, overlayWindow, selectionWindow, writerWindow, programmingChatWindow].some((win) => win && !win.isDestroyed() && win.webContents === event.sender);
+}
+function programmingCourse(id) {
+  const course=readCourses().find(item=>item.id===id&&item.kind==='programming');
+  if(!course)throw new Error('编程课程不存在。');
+  return course;
+}
+function programmingAttachments(courseId,ids){
+  if(!Array.isArray(ids)||ids.length>4)throw new Error('每次最多附 4 张截图。');
+  return ids.map(id=>{const image=chatImages.get(id);if(!image||image.courseId!==courseId||image.scope!=='programming')throw new Error('截图已失效，请重新截图。');return image.file;});
+}
+function programmingSnippets(input){
+  if(!Array.isArray(input)||input.length>5)throw new Error('每次最多附 5 个片段。');
+  return input.map(item=>{const file=String(item?.file||'').slice(0,300),text=String(item?.text||'').slice(0,8000);if(!file||!text)throw new Error('片段内容无效。');return `选取片段（${file}）：\n${text}`;}).join('\n\n');
+}
+function findPythonIdle(){
+  const roots=[process.env.LOCALAPPDATA&&path.join(process.env.LOCALAPPDATA,'Programs','Python'),path.join(process.env.ProgramFiles||'C:\\Program Files','Python')].filter(Boolean);
+  for(const root of roots){
+    if(!fs.existsSync(root))continue;
+    const versions=fs.readdirSync(root,{withFileTypes:true}).filter(item=>item.isDirectory()&&/^Python\d+$/i.test(item.name)).sort((a,b)=>b.name.localeCompare(a.name,undefined,{numeric:true}));
+    for(const version of versions){const folder=path.join(root,version.name),exe=path.join(folder,'pythonw.exe');if(fs.existsSync(exe)&&fs.existsSync(path.join(folder,'Lib','idlelib')))return exe;}
+  }
+  return null;
+}
+async function spawnProgrammingEditor(executable,args){
+  const child=spawn(executable,args,{detached:true,stdio:'ignore',windowsHide:false});
+  await new Promise((resolve,reject)=>{child.once('error',reject);child.once('spawn',resolve);});
+  child.unref();
+}
+async function openAssociatedEditor(entry){
+  if(process.platform!=='win32')return false;
+  const encodedPath=Buffer.from(entry,'utf8').toString('base64');
+  const script=`$file=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedPath}')); Start-Process -FilePath $file -Verb Edit -ErrorAction Stop`;
+  const command=Buffer.from(script,'utf16le').toString('base64');
+  return new Promise(resolve=>{
+    const child=spawn('powershell.exe',['-NoProfile','-NonInteractive','-EncodedCommand',command],{windowsHide:true,stdio:'ignore'});
+    child.once('error',()=>resolve(false));child.once('exit',code=>resolve(code===0));
+  });
+}
+async function openProgrammingEditor(course,folder,entry){
+  const selected=course.programming.editorPath;
+  if(selected){if(!fs.existsSync(selected))throw new Error('指定的编程程序不存在，请在课程编辑页重新选择。');await spawnProgrammingEditor(selected,[folder]);return;}
+  if(path.extname(entry).toLowerCase()==='.py'){
+    const idle=findPythonIdle();
+    if(idle){await spawnProgrammingEditor(idle,['-m','idlelib',entry]);return;}
+  }
+  await openAssociatedEditor(entry);
+}
+async function showProgrammingChat() {
+  if(programmingChatWindow&&!programmingChatWindow.isDestroyed()) { programmingChatWindow.show();return programmingChatWindow; }
+  const area=screen.getPrimaryDisplay().workArea;
+  programmingChatWindow=new BrowserWindow({x:area.x+area.width-90,y:area.y+area.height-90,width:66,height:66,minWidth:66,minHeight:66,frame:false,transparent:true,alwaysOnTop:true,skipTaskbar:true,resizable:false,show:false,webPreferences:webPreferences()});
+  const win=programmingChatWindow;
+  programmingBallPosition={x:win.getBounds().x,y:win.getBounds().y};
+  win.setAlwaysOnTop(true,'floating');
+  win.webContents.on('will-navigate',event=>event.preventDefault());
+  win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
+  win.on('closed',()=>{if(programmingChatWindow===win)programmingChatWindow=null;});
+  await win.loadFile(path.join(__dirname,'renderer','programming-chat.html'));
+  if(!win.isDestroyed())win.show();
+  return win;
+}
+const windowTransitions=new WeakMap();
+function transitionBounds(win,target,duration=0){
+  windowTransitions.get(win)?.cancel();
+  if(!duration){win.setBounds(target);return Promise.resolve(true);}
+  const start=win.getBounds(),started=Date.now();
+  return new Promise(resolve=>{
+    let timer;
+    const transition={cancel:()=>{clearTimeout(timer);if(windowTransitions.get(win)===transition)windowTransitions.delete(win);resolve(false);}};
+    windowTransitions.set(win,transition);
+    function step(){
+      if(win.isDestroyed()){transition.cancel();return;}
+      const progress=Math.min(1,(Date.now()-started)/duration),ease=1-(1-progress)**3;
+      const bounds={};for(const key of ['x','y','width','height'])bounds[key]=Math.round(start[key]+(target[key]-start[key])*ease);
+      win.setBounds(bounds);
+      if(progress<1)timer=setTimeout(step,16);
+      else{windowTransitions.delete(win);resolve(true);}
+    }
+    step();
+  });
+}
+async function waitForCollapsedFrame(win){
+  await Promise.race([
+    win.webContents.executeJavaScript('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))').catch(()=>{}),
+    new Promise(resolve=>setTimeout(resolve,80)),
+  ]);
+}
+async function resizeProgrammingChat(win,expanded,animate=false){
+  const wasExpanded=programmingChatExpanded;
+  programmingChatExpanded=Boolean(expanded);
+  const bounds=win.getBounds();
+  if(expanded&&!wasExpanded)programmingBallPosition={x:bounds.x,y:bounds.y};
+  if(!programmingBallPosition)programmingBallPosition={x:bounds.x,y:bounds.y};
+  const width=expanded?420:66,height=expanded?560:66;
+  win.setResizable(true);win.setMinimumSize(66,66);
+  if(!expanded)win.webContents.send('programming:chatMode',false);
+  if(!expanded&&animate&&wasExpanded)await waitForCollapsedFrame(win);
+  if(programmingChatExpanded!==Boolean(expanded)||win.isDestroyed())return;
+  if(expanded){win.show();win.focus();}
+  const completed=await transitionBounds(win,{x:programmingBallPosition.x,y:programmingBallPosition.y,width,height},animate?110:0);
+  if(!completed||win.isDestroyed())return;
+  win.setMinimumSize(expanded?360:66,expanded?400:66);win.setResizable(Boolean(expanded));
+  if(expanded)win.webContents.send('programming:chatMode',true);
+  if(!expanded){if(mainWindow?.isFocused())win.hide();else win.showInactive();}
+}
+async function resizeExternalExercise(expanded,animate=false){
+  if(!overlayWindow||overlayWindow.isDestroyed()||!activeCourse||sessionMode!=='exercise'||hasWriter())throw new Error('当前没有外部做题窗口。');
+  const wasExpanded=externalExerciseExpanded;
+  externalExerciseExpanded=Boolean(expanded);
+  const bounds=overlayWindow.getBounds();
+  if(expanded&&!wasExpanded)externalExerciseBallPosition={x:bounds.x,y:bounds.y};
+  if(!externalExerciseBallPosition)externalExerciseBallPosition={x:bounds.x,y:bounds.y};
+  const width=expanded?430:66,height=expanded?560:66;
+  overlayWindow.setResizable(true);overlayWindow.setMinimumSize(66,66);
+  if(!expanded)overlayWindow.webContents.send('overlay:expanded',false);
+  if(!expanded&&animate&&wasExpanded)await waitForCollapsedFrame(overlayWindow);
+  if(externalExerciseExpanded!==Boolean(expanded)||overlayWindow.isDestroyed())return;
+  if(expanded){overlayWindow.show();overlayWindow.focus();}
+  const completed=await transitionBounds(overlayWindow,{x:externalExerciseBallPosition.x,y:externalExerciseBallPosition.y,width,height},animate?110:0);
+  if(!completed||overlayWindow.isDestroyed())return;
+  overlayWindow.setMinimumSize(expanded?360:66,expanded?420:66);overlayWindow.setResizable(Boolean(expanded));
+  if(expanded)overlayWindow.webContents.send('overlay:expanded',true);
+  if(!expanded)overlayWindow.showInactive();
 }
 function register(channel, handler) {
   ipcMain.handle(channel, (event, ...args) => {
@@ -151,7 +285,7 @@ function usesBuiltin(course) { return effectiveWorkTarget(course).type==='builti
 function hasWriter(){return Boolean(writerWindow&&!writerWindow.isDestroyed());}
 function sendChat(channel,...args){const win=hasWriter()?writerWindow:overlayWindow;if(win&&!win.isDestroyed())win.webContents.send(channel,...args);}
 function restoreChat(){if(hasWriter())writerWindow.webContents.send('writer:aiVisibility',writerAIShown);else overlayWindow.show();}
-function sessionCourse() { return {...learnerCourse(activeCourse),sessionMode,sessionId,builtinWriter:hasWriter()}; }
+function sessionCourse() { return {...learnerCourse(activeCourse),sessionMode,sessionId,builtinWriter:hasWriter(),externalWriter:sessionMode==='exercise'&&!hasWriter()}; }
 function pausedState() { return {mode:sessionMode,courseId:activeCourseId}; }
 function sendSession(win) { win.webContents.send('session:course',sessionCourse());win.webContents.send('session:progress',exercise.progress()); }
 async function openWriter() {
@@ -180,6 +314,15 @@ function storeChatImage(bytes) {
   sendChat('chat:capture',{id,image:'data:image/png;base64,'+bytes.toString('base64'),number:exercise.index+1});
   return {chat:true};
 }
+function storeProgrammingChatImage(bytes){
+  if(bytes.length>20*1024*1024)throw new Error('图片超过 20 MB，请缩小区域。');
+  const id=randomUUID(),folder=path.join(app.getPath('userData'),'chat-images');fs.mkdirSync(folder,{recursive:true});
+  const file=path.join(folder,id+'.png');fs.writeFileSync(file,bytes);
+  chatImages.set(id,{file,courseId:programmingCourseId,scope:'programming'});
+  const result={id,image:'data:image/png;base64,'+bytes.toString('base64')};
+  programmingChatWindow?.webContents.send('programming:capture',result);
+  return result;
+}
 async function readingTarget(course) {
   const target=normalizeWorkTarget(course);
   let file=target.filePath;
@@ -193,13 +336,15 @@ async function readingTarget(course) {
 function createWindows() {
   mainWindow = new BrowserWindow({ title:'AI-StudyDesk', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
   const homeLoaded=mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  mainWindow.on('closed', () => { mainWindow = null; if (writerWindow && !writerWindow.isDestroyed()) writerWindow.destroy(); if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); });
+  mainWindow.on('focus',()=>{if(programmingExternalActive&&!programmingChatExpanded&&programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.hide();});
+  mainWindow.on('blur',()=>{if(programmingExternalActive&&!programmingChatExpanded&&programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.showInactive();});
+  mainWindow.on('closed', () => { mainWindow = null; if (writerWindow && !writerWindow.isDestroyed()) writerWindow.destroy(); if (overlayWindow && !overlayWindow.isDestroyed()) overlayWindow.close(); if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.close(); });
   const area = screen.getPrimaryDisplay().workArea;
   overlayWindow = new BrowserWindow({
     width: 430, height: 560, minWidth: 360, minHeight: 420,
     x: area.x + area.width - 454, y: area.y + area.height - 584,
-    frame: false, show: false, resizable: true, alwaysOnTop: true, skipTaskbar: false,
-    backgroundColor: '#ffffff', webPreferences: webPreferences(),
+    frame: false, transparent:true, show: false, resizable: true, alwaysOnTop: true, skipTaskbar: true,
+    webPreferences: webPreferences(),
   });
   overlayReady=homeLoaded.then(()=>{if(overlayWindow&&!overlayWindow.isDestroyed())return overlayWindow.loadFile(path.join(__dirname,'renderer','overlay.html'));});
   overlayWindow.setAlwaysOnTop(true, 'pop-up-menu');
@@ -217,14 +362,15 @@ function createWindows() {
 }
 
 async function beginCapture(purpose = 'answer') {
-  if (!['answer','chat'].includes(purpose)) throw new Error('截图用途无效。');
+  if (!['answer','chat','programming-chat'].includes(purpose)) throw new Error('截图用途无效。');
   if (selectionWindow && !selectionWindow.isDestroyed()) return;
-  if (!exercise) throw new Error('请先进入课程。');
-  if(sessionMode==='reading')purpose='chat';
-  captureQuestion = { courseId: activeCourseId, index: exercise.index, purpose };
-  const bounds = hasWriter()?writerWindow.getBounds():overlayWindow.getBounds();
+  const programming=purpose==='programming-chat';
+  if(programming){if(!programmingCourseId||!programmingChatWindow)throw new Error('请先打开编程 AI 问答。');}
+  else{if(!exercise)throw new Error('请先进入课程。');if(sessionMode==='reading')purpose='chat';}
+  captureQuestion = programming?{courseId:programmingCourseId,index:-1,purpose}:{courseId:activeCourseId,index:exercise.index,purpose};
+  const bounds = programming?programmingChatWindow.getBounds():hasWriter()?writerWindow.getBounds():overlayWindow.getBounds();
   const display = screen.getDisplayNearestPoint({ x: bounds.x + Math.floor(bounds.width / 2), y: bounds.y + Math.floor(bounds.height / 2) });
-  overlayWindow.hide();if(hasWriter())writerWindow.webContents.send('writer:aiVisibility',false);
+  if(programming)programmingChatWindow.hide();else{overlayWindow.hide();if(hasWriter())writerWindow.webContents.send('writer:aiVisibility',false);}
   try {
     await new Promise((resolve) => setTimeout(resolve, 250));
     const sources = await desktopCapturer.getSources({
@@ -251,12 +397,15 @@ async function beginCapture(purpose = 'answer') {
       selectionWindow.focus();
     });
     selectionWindow.on('closed', () => {
+      const wasProgramming=captureQuestion?.purpose==='programming-chat';
       selectionWindow = null; captureImage = null; captureBounds = null; captureQuestion = null;
-      if (activeCourseId && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) restoreChat();
+      if(wasProgramming){if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.show();}
+      else if (activeCourseId && mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) restoreChat();
     });
     selectionWindow.loadFile(path.join(__dirname, 'renderer', 'capture.html'));
   } catch (error) {
-    restoreChat();
+    if(programming){if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.show();}
+    else restoreChat();
     throw error;
   }
 }
@@ -321,7 +470,7 @@ app.whenReady().then(() => {
     let raw;
     try { raw = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '')); }
     catch { throw new Error('无法读取课程 JSON，请检查文件格式。'); }
-    const course = normalizeCourse({ ...raw, workTarget: { type: 'default' } });
+    const course = normalizeCourse({ ...raw, workTarget: { type: 'default' },...(raw?.kind==='programming'?{programming:{...raw.programming,editorPath:''}}:{}) });
     writeCourses([course, ...readCourses()]);
     return learnerCourse(course);
   });
@@ -332,6 +481,137 @@ app.whenReady().then(() => {
     if (index < 0) courses.unshift(course); else courses[index] = course;
     writeCourses(courses);
     return learnerCourse(course);
+  });
+  register('programming:chooseFolder', async () => {
+    const result=await dialog.showOpenDialog(mainWindow,{title:'选择课程题目文件夹',properties:['openDirectory']});
+    return result.canceled?null:importFolder(result.filePaths[0]);
+  });
+  register('programming:start', async id => {
+    if(aiService.active)throw new Error('请等待 AI 回复完成。');
+    const course=programmingCourse(id),folder=programmingWorkspaces.ensure(course);
+    if(programmingCourseId!==id){
+      if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.close();
+      programmingExternalActive=false;programmingChatExpanded=false;pendingProgrammingEdit=null;pendingProgrammingSubmission=null;
+    }
+    programmingCourseId=id;
+    return {folder,files:programmingWorkspaces.list(id),entryFile:course.programming.entryFile};
+  });
+  register('programming:openExternal', async id => {
+    const course=programmingCourse(id);
+    if(programmingCourseId!==id)throw new Error('请先进入这门编程课程。');
+    const folder=programmingWorkspaces.ensure(course);
+    const entry=path.join(folder,...course.programming.entryFile.split('/'));
+    if(!fs.existsSync(entry))throw new Error('入口文件已被移走，请检查工作区。');
+    const folderError=await shell.openPath(folder);
+    if(folderError)throw new Error(`无法打开编程工作区：${folderError}`);
+    try{await openProgrammingEditor(course,folder,entry);}catch(error){console.warn('无法自动打开编程程序：',error);}
+    programmingExternalActive=true;
+    await resizeProgrammingChat(await showProgrammingChat(),false);
+    mainWindow.hide();programmingChatWindow.showInactive();
+    return '已打开课程工作区。';
+  });
+  register('programming:files', id => {programmingCourse(id);return programmingWorkspaces.list(id);});
+  register('programming:read', ({courseId,file}) => {programmingCourse(courseId);return programmingWorkspaces.read(courseId,file);});
+  register('programming:write', ({courseId,file,content,hash}) => {programmingCourse(courseId);return programmingWorkspaces.write(courseId,file,content,hash);});
+  register('programming:chatToggle', async (expanded,animate=true) => {
+    if(!programmingCourseId)throw new Error('请先进入编程课程。');
+    if(!expanded&&!programmingExternalActive){if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.close();return true;}
+    const win=await showProgrammingChat();
+    await resizeProgrammingChat(win,expanded,animate);
+    return true;
+  });
+  register('programming:chatMove', ({dx,dy}) => {
+    if(!programmingChatWindow||programmingChatWindow.isDestroyed())return false;
+    if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>500||Math.abs(dy)>500)throw new Error('窗口移动无效。');
+    const [x,y]=programmingChatWindow.getPosition();programmingChatWindow.setPosition(x+Math.round(dx),y+Math.round(dy));if(!programmingChatExpanded)programmingBallPosition={x:x+Math.round(dx),y:y+Math.round(dy)};return true;
+  });
+  register('programming:addSnippet', async ({courseId,file,text}) => {
+    if(courseId!==programmingCourseId||!programmingWorkspaces.list(courseId).includes(file))throw new Error('选取片段对应的文件已改变。');
+    if(typeof text!=='string'||!text.trim()||text.length>8000)throw new Error('请选择 1–8000 个字符。');
+    const win=await showProgrammingChat();await resizeProgrammingChat(win,true);
+    win.webContents.send('programming:snippet',{file,text});
+    return true;
+  });
+  register('programming:active', () => programmingCourseId?{courseId:programmingCourseId,title:programmingCourse(programmingCourseId).title}:null);
+  register('programming:leave', id => {
+    if(programmingCourseId===id){programmingCourseId=null;programmingExternalActive=false;programmingChatExpanded=false;pendingProgrammingEdit=null;pendingProgrammingSubmission=null;if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.close();}
+    return true;
+  });
+  register('programming:ask', async ({courseId,question,attachmentIds=[],snippets=[]}) => {
+    if(courseId!==programmingCourseId)throw new Error('编程工作区已切换。');
+    programmingCourse(courseId);
+    const text=String(question||'').trim().slice(0,2500);
+    if(!text)throw new Error('请输入问题。');
+    const context=programmingWorkspaces.context(courseId);
+    const files=programmingAttachments(courseId,attachmentIds),selected=programmingSnippets(snippets);
+    return aiService.chat({scope:'programming',courseId,question:text,historyPrompt:text,message:`解释知识点，语言精简。以下是完整练习工作区；题目写在文件注释中。只回答，不直接修改文件。\n\n${context}\n\n${selected}\n\n问题：${text}`,files});
+  });
+  register('programming:propose', async ({courseId,instruction,attachmentIds=[],snippets=[]}) => {
+    if(courseId!==programmingCourseId)throw new Error('编程工作区已切换。');
+    programmingCourse(courseId);
+    const config=aiSettings.read();
+    if(config.mode!=='api')throw new Error('文件修改建议仅支持 API 连接，请在 AI 设置中选择 API。');
+    const text=String(instruction||'').trim().slice(0,2500);
+    if(!text)throw new Error('请描述希望 AI 修改的内容。');
+    const context=programmingWorkspaces.context(courseId);
+    const files=programmingAttachments(courseId,attachmentIds),selected=programmingSnippets(snippets);
+    const prompt=`根据用户要求提出文件修改方案。只输出 JSON 对象 {"changes":[{"path":"相对路径","content":"修改后的完整文件"}]}；路径必须是现有文件；不得直接操作文件。\n\n完整工作区：\n${context}\n\n${selected}\n\n用户要求：${text}`;
+    const reply=await aiService.direct(config,prompt,files,()=>{});
+    if(reply?.needsDesktop)throw new Error('Codex 桌面任务占用中，请改用 API 连接来生成修改建议。');
+    let parsed;try{parsed=JSON.parse(String(reply).replace(/^```(?:json)?\s*|\s*```$/g,''));}catch{throw new Error('AI 未返回可预览的文件修改方案，请重试。');}
+    if(!Array.isArray(parsed.changes)||!parsed.changes.length||parsed.changes.length>20)throw new Error('AI 修改方案需包含 1–20 个文件。');
+    const known=new Set(programmingWorkspaces.list(courseId));
+    const changes=parsed.changes.map(item=>{
+      if(!known.has(item.path)||typeof item.content!=='string')throw new Error('AI 提议了无效文件路径。');
+      const previous=programmingWorkspaces.read(courseId,item.path);
+      return {path:item.path,before:previous.content,after:item.content,hash:previous.hash};
+    });
+    validateFiles(changes.map(item=>({path:item.path,content:item.after})));
+    pendingProgrammingEdit={token:randomUUID(),courseId,changes};
+    return {token:pendingProgrammingEdit.token,changes:changes.map(({path,before,after})=>({path,before,after}))};
+  });
+  register('programming:apply', token => {
+    const edit=pendingProgrammingEdit;
+    if(!edit||edit.token!==token||edit.courseId!==programmingCourseId)throw new Error('修改方案已失效，请重新生成。');
+    for(const item of edit.changes){if(programmingWorkspaces.read(edit.courseId,item.path).hash!==item.hash)throw new Error(`文件已变化：${item.path}。请重新生成方案。`);}
+    for(const item of edit.changes)programmingWorkspaces.write(edit.courseId,item.path,item.after,item.hash);
+    pendingProgrammingEdit=null;
+    return edit.changes.length;
+  });
+  register('programming:submissionPreview', id => {
+    programmingCourse(id);
+    const files=programmingWorkspaces.list(id).map(file=>programmingWorkspaces.read(id,file));
+    pendingProgrammingSubmission={token:randomUUID(),courseId:id,files};
+    return {token:pendingProgrammingSubmission.token,files};
+  });
+  register('programming:showSubmission', id => {
+    if(id!==programmingCourseId||!programmingExternalActive)throw new Error('当前没有进行中的编程练习。');
+    const files=programmingWorkspaces.list(id).map(file=>programmingWorkspaces.read(id,file));
+    pendingProgrammingSubmission={token:randomUUID(),courseId:id,files};
+    const preview={token:pendingProgrammingSubmission.token,files};
+    if(programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.hide();
+    mainWindow.show();mainWindow.focus();
+    mainWindow.webContents.send('programming:submissionReady',{id,preview});
+    return true;
+  });
+  register('programming:submit', ({id,token}) => {
+    const course=programmingCourse(id);
+    const pending=pendingProgrammingSubmission;
+    if(!pending||pending.courseId!==id||pending.token!==token)throw new Error('提交预览已失效，请重新预览。');
+    const files=pending.files;
+    for(const item of files)if(programmingWorkspaces.read(id,item.path).hash!==item.hash)throw new Error(`文件已变化：${item.path}。请重新预览后提交。`);
+    const root=path.join(app.getPath('userData'),'programming-submissions');
+    const folder=path.join(root,`${id}-${new Date().toISOString().replace(/[:.]/g,'-')}`);
+    fs.mkdirSync(folder,{recursive:true});
+    for(const item of files){const target=path.join(folder,...item.path.split('/'));fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,item.content,'utf8');}
+    fs.writeFileSync(path.join(folder,'submission.json'),JSON.stringify({courseId:id,title:course.title,submittedAt:new Date().toISOString(),files:files.map(({path,hash})=>({path,hash}))},null,2));
+    pendingProgrammingSubmission=null;
+    return folder;
+  });
+  register('programming:workspaces', () => programmingWorkspaces.entries().map(item=>({...item,title:readCourses().find(c=>c.id===item.courseId)?.title||'已删除的课程'})));
+  register('programming:clearWorkspace', id => {
+    if(id===programmingCourseId)throw new Error('请先退出当前编程课程，再清理工作区。');
+    programmingWorkspaces.remove(id);return true;
   });
   register('courses:delete', (id) => { writeCourses(readCourses().filter((course) => course.id !== id)); return true; });
   register('dialog:image', async () => {
@@ -377,10 +657,16 @@ app.whenReady().then(() => {
     overlayWindow.hide();
     if(mode==='reading'||usesBuiltin(course))await openWriter();
     sendSession(overlayWindow);
-    writerAIShown=false;if(!hasWriter())overlayWindow.show();mainWindow.hide();return {warning,mode,courseId:id};
+    writerAIShown=false;if(!hasWriter())await resizeExternalExercise(false);mainWindow.hide();return {warning,mode,courseId:id};
     } finally {startingSession=false;}
   });
   register('writer:open',()=>openWriter());
+  register('overlay:expand', async (expanded,animate=true)=>{await resizeExternalExercise(Boolean(expanded),animate);return true;});
+  register('overlay:move', ({dx,dy})=>{
+    if(!overlayWindow||overlayWindow.isDestroyed()||externalExerciseExpanded||sessionMode!=='exercise'||hasWriter())return false;
+    if(!Number.isFinite(dx)||!Number.isFinite(dy)||Math.abs(dx)>500||Math.abs(dy)>500)throw new Error('窗口移动无效。');
+    const [x,y]=overlayWindow.getPosition();overlayWindow.setPosition(x+Math.round(dx),y+Math.round(dy));externalExerciseBallPosition={x:x+Math.round(dx),y:y+Math.round(dy)};return true;
+  });
   register('writer:aiState',()=>writerAIShown);
   register('writer:toggleAI',input=>{
     if(!activeCourse||!hasWriter()||input?.sessionId!==sessionId)throw new Error('当前学习会话已改变。');
@@ -458,7 +744,8 @@ app.whenReady().then(() => {
   register('capture:cancel', () => { if (selectionWindow && !selectionWindow.isDestroyed()) selectionWindow.close(); return true; });
   register('capture:commit', (rect) => {
     if (!selectionWindow || !captureImage || !captureBounds) throw new Error('没有正在进行的截图。');
-    if (captureQuestion?.courseId !== activeCourseId || captureQuestion.index !== exercise?.index) throw new Error('截图对应的题目已改变。');
+    const programming=captureQuestion?.purpose==='programming-chat';
+    if(programming?captureQuestion.courseId!==programmingCourseId:captureQuestion?.courseId!==activeCourseId||captureQuestion.index!==exercise?.index)throw new Error('截图对应的内容已改变。');
     const size = captureImage.getSize();
     const scaleX = size.width / captureBounds.width;
     const scaleY = size.height / captureBounds.height;
@@ -468,6 +755,7 @@ app.whenReady().then(() => {
     const height = Math.min(size.height - y, Math.floor(Number(rect?.height) * scaleY));
     if (![x, y, width, height].every(Number.isFinite) || width < 20 || height < 20) throw new Error('请框选更大的截图区域。');
     const bytes = captureImage.crop({ x, y, width, height }).toPNG();
+    if(programming){const result=storeProgrammingChatImage(bytes);selectionWindow.close();return result;}
     if (captureQuestion.purpose === 'chat') {const result=storeChatImage(bytes);selectionWindow.close();return result;}
     const progress = exercise.saveScreenshot(captureQuestion.index, bytes);
     applyProgress(progress);

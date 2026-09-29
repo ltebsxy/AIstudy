@@ -6,7 +6,8 @@ const {_electron}=require('playwright-core');
 const {normalizeCourse}=require('../lib/model');
 async function main(){
  const root=path.resolve(__dirname,'..'),data=fs.mkdtempSync(path.join(os.tmpdir(),'study-chat-capture-'));
- const course=normalizeCourse({title:'截图用途验证',knowledge:'内容',questions:[{text:'第一题'},{text:'最后一题'}]});
+ const workFile=path.join(data,'external-work.txt');fs.writeFileSync(workFile,'作答文件');
+ const course=normalizeCourse({title:'截图用途验证',knowledge:'内容',questions:[{text:'第一题'},{text:'最后一题'}],workTarget:{type:'file',filePath:workFile}});
  fs.writeFileSync(path.join(data,'courses.json'),JSON.stringify([course]));
  const exe=process.env.STUDY_TEST_EXE;
  const app=await _electron.launch({executablePath:exe||require('electron'),args:exe?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});
@@ -23,7 +24,9 @@ async function main(){
    process.mainModule.require('./lib/desktop-codex').DesktopCodex.prototype.ask=ask;
    process.mainModule.require('./lib/codex-client').CodexClient.prototype.ask=ask;
   });
+  await app.evaluate(({shell})=>{shell.openPath=async()=>'';});
   await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
+  await overlay.locator('#exercise-ball').click();await overlay.locator('#capture').waitFor({state:'visible'});
   const visible=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='AI-StudyDesk').isVisible());
   async function capture(chat,number,cancel=false){
    const pending=app.waitForEvent('window');await overlay.locator('#capture').click();const cap=await pending;

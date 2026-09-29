@@ -22,7 +22,7 @@ const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&
 
 function footer() {
   if(chatOnly())return '<footer class="footer reading-footer"><select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button class="footer-button" id="capture" '+(busy||attachments.length>=4?'disabled':'')+'>▣ 截图提问</button><button class="footer-button" id="open-writer">✎ 文件与笔记</button></footer>';
-  return `<footer class="footer"><button class="footer-button" id="capture" ${busy || (mode === 'chat' && attachments.length >= 4) ? 'disabled' : ''}>▣ 截图</button><button class="footer-button" id="toggle-chat">${mode === 'chat' ? '▤ 返回题目' : '✦ AI 聊天'}</button><button class="footer-button finish" id="finish" ${busy ? 'disabled' : ''}>${index === course.questions.length - 1 ? '完成并提交' : '完成，下一题'}</button></footer>`;
+  return `<footer class="footer"><button class="footer-button" id="capture" ${busy || (mode === 'chat' && attachments.length >= 4) ? 'disabled' : ''}>${mode === 'chat' ? '▣ 截图提问' : '▣ 截图作答'}</button><button class="footer-button" id="toggle-chat">${mode === 'chat' ? '▤ 返回题目' : '✦ AI 聊天'}</button><button class="footer-button finish" id="finish" ${busy ? 'disabled' : ''}>${index === course.questions.length - 1 ? '完成并提交' : '完成，下一题'}</button></footer>`;
 }
 
 function bindFooter() {
@@ -43,7 +43,7 @@ function responseMarkup(question) {
   const value=responses[index]||[];
   if(question.type==='choice')return '<div class="response-options">'+question.options.map((option,i)=>'<label class="response-option"><input type="'+(question.multiple?'checkbox':'radio')+'" name="answer-option" value="'+i+'" '+(value.includes(i)?'checked':'')+'><span>'+String.fromCharCode(65+i)+'. <span class="option-text">'+esc(option)+'</span></span></label>').join('')+'</div>';
   if(question.type==='blank')return '<div class="response-blanks">'+(question.blanks||['答案']).map((label,i)=>'<label>'+esc(label)+'<input class="blank-answer" data-blank="'+i+'" aria-label="'+esc(label)+'" value="'+esc(value[i]||'')+'" maxlength="5000" autocomplete="off"></label>').join('')+'</div>';
-  return '<button class="nav-button writer-entry" id="open-writer">✎ 打开写字工具</button>';
+  return '';
 }
 function drawQuestion() {
   const question = course.questions[index];
@@ -197,7 +197,14 @@ window.study.onCodexAnswer((text) => {
   }
 });
 window.study.onChatCapture(image=>{attachments.push(image);mode='chat';draw();});
-window.study.onCourse((next) => {contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';desktopMessage=null;course=next;index=0;captured=[];responses={};responseSave=Promise.resolve();responseError=null;mode=chatOnly()?'chat':'question';document.getElementById('close-ai').hidden=!chatOnly();document.querySelector('.dragbar strong').textContent=chatOnly()?'AI 问答':'正在练习';draw();if(chatOnly())loadConnection();});
+window.study.onCourse((next) => {contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';desktopMessage=null;course=next;index=0;captured=[];responses={};responseSave=Promise.resolve();responseError=null;mode=chatOnly()?'chat':'question';document.body.classList.toggle('external-exercise',Boolean(next.externalWriter));document.body.classList.toggle('collapsed',Boolean(next.externalWriter));document.getElementById('collapse-exercise').hidden=!next.externalWriter;document.getElementById('close-ai').hidden=!chatOnly();document.querySelector('.dragbar strong').textContent=chatOnly()?'AI 问答':'正在练习';draw();if(chatOnly())loadConnection();});
+window.study.onExerciseOverlayExpanded(expanded=>document.body.classList.toggle('collapsed',!expanded));
+const exerciseBall=document.getElementById('exercise-ball');let ballDown=null,ballMoved=false;
+exerciseBall.onpointerdown=e=>{ballDown={x:e.screenX,y:e.screenY};ballMoved=false;exerciseBall.setPointerCapture(e.pointerId);};
+exerciseBall.onpointermove=e=>{if(!ballDown)return;const dx=e.screenX-ballDown.x,dy=e.screenY-ballDown.y;if(Math.abs(dx)+Math.abs(dy)>3)ballMoved=true;if(ballMoved&&(dx||dy)){window.study.moveExerciseOverlay({dx,dy}).catch(()=>{});ballDown={x:e.screenX,y:e.screenY};}};
+exerciseBall.onpointerup=()=>{if(!ballMoved)window.study.expandExerciseOverlay(true).catch(e=>alert(e.message));ballDown=null;};
+exerciseBall.onpointercancel=()=>{ballDown=null;};
+document.getElementById('collapse-exercise').onclick=()=>window.study.expandExerciseOverlay(false).catch(e=>alert(e.message));
 window.study.onProgress((progress) => {const changed=index!==progress.index;if(changed)attachments=[];index=progress.index;captured=progress.captured;responses=changed?(progress.responses||{}):{...(progress.responses||{}),...responses};if(changed&&!embedded)draw();});
 document.getElementById('back-main').onclick = () => afterResponse(()=>window.study.pauseSession());
 

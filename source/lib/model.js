@@ -1,4 +1,5 @@
 const crypto = require('node:crypto');
+const { validateFiles } = require('./programming-workspace');
 
 function cleanText(value, max = 20000) {
   return String(value ?? '').trim().slice(0, max);
@@ -42,12 +43,22 @@ function normalizeCourse(input, existingId) {
   if (!knowledge) throw new Error('请填写知识点介绍。');
   const rawQuestions = Array.isArray(input.questions) ? input.questions : [];
   const questions = rawQuestions.map(normalizeQuestion).filter((question) => question.text || question.image);
-  if (!questions.length) throw new Error('请至少添加一道题目。');
+  const kind = input.kind === 'programming' ? 'programming' : 'standard';
+  if (kind === 'standard' && !questions.length) throw new Error('请至少添加一道题目。');
+  const programming = kind === 'programming' ? {
+    files: validateFiles(input.programming?.files),
+    entryFile: String(input.programming?.entryFile || input.programming?.files?.[0]?.path || ''),
+    editorPath: cleanText(input.programming?.editorPath, 2000),
+  } : undefined;
+  if (programming && !programming.files.some(file => file.path === programming.entryFile)) throw new Error('入口文件必须在课程文件夹中。');
+  if (programming?.editorPath && !/\.exe$/i.test(programming.editorPath)) throw new Error('编辑程序必须是 .exe。');
   return {
     id: existingId || crypto.randomUUID(),
     title,
     description: cleanText(input.description, 240),
     knowledge,
+    kind,
+    ...(programming ? { programming } : {}),
     ...(input.knowledgeFormat === 'sections' ? { knowledgeFormat: 'sections' } : {}),
     questions,
     workTarget: normalizeWorkTarget(input),

@@ -31,7 +31,7 @@ function questionMarkup(question, index) {
 }
 function renderEditor(id) {
   nav('editor');
-  draft = id ? structuredClone(byId(id)) : { title: '', description: '', knowledge: '', questions: [{ text: '', image: '' }], workTarget: { type: 'default' } };
+  draft = id ? structuredClone(byId(id)) : { title: '', description: '', knowledge: '', kind:'standard', questions: [{ text: '', image: '' }], workTarget: { type: 'default' } };
   draft.workTarget ||= { type: 'file', filePath: draft.workFile || '' };
   delete draft.workFile;
   targetDrafts = { [draft.workTarget.type]: structuredClone(draft.workTarget) };
@@ -43,6 +43,11 @@ function syncEditor() {
   draft.description = document.getElementById('course-description')?.value ?? draft.description;
   draft.knowledge = document.getElementById('knowledge')?.value ?? draft.knowledge;
   draft.knowledgeFormat = document.getElementById('knowledge-sections')?.checked ? 'sections' : undefined;
+  if(draft.kind==='programming'){
+    draft.programming ||= {files:[],entryFile:'',editorPath:''};
+    draft.programming.entryFile=document.getElementById('programming-entry')?.value||draft.programming.entryFile;
+    return;
+  }
   if (draft.workTarget.type === 'onenote') draft.workTarget.url = document.getElementById('onenote-url')?.value ?? draft.workTarget.url;
   view.querySelectorAll('.question-editor').forEach((row) => {
     const question = draft.questions[Number(row.dataset.index)];
@@ -71,6 +76,7 @@ function workTargetMarkup() {
   return `<div class="field-header"><h3>做题软件</h3></div><p class="subtitle">为这份课程选择做题时打开的位置。</p><div class="target-tabs">${tabs}</div><div class="target-detail">${details}</div>`;
 }
 function drawEditor() {
+  if(draft.kind==='programming')return drawProgrammingEditor();
   const editing = Boolean(draft.id);
   view.innerHTML = `<div class="content"><button class="back" id="back-home">← 返回课程列表</button><header class="toolbar"><div><div class="eyebrow">CREATE YOUR LEARNING PATH</div><h1 class="page-title">${editing ? '编辑课程' : '新建课程'}</h1><p class="subtitle">只需要知识点、题目和一份做题文件。</p></div></header><div class="editor-card"><div class="form-grid"><div class="field"><label for="course-title">课程名称</label><input id="course-title" maxlength="80" placeholder="例如：一元二次方程" value="${esc(draft.title)}"></div><div class="field"><label for="course-description">一句话简介 <span class="hint">可选</span></label><input id="course-description" maxlength="240" placeholder="简要介绍这个课程" value="${esc(draft.description)}"></div><div class="field"><label for="knowledge">知识点介绍</label><textarea id="knowledge" placeholder="在这里写入这节课需要掌握的知识点">${esc(draft.knowledge)}</textarea></div></div><div class="divider"></div><div class="field-header"><h3>练习题目</h3><button class="btn btn-soft" id="add-question">＋ 添加题目</button></div><p class="subtitle">每题可以输入文字，也可以添加一张图片。</p><div id="question-list">${draft.questions.map(questionMarkup).join('')}</div><div class="divider"></div><div class="field"><label>做题时打开的文件 <span class="hint">可选，可选择 PDF 或 Goodnotes 已关联的文件</span></label><div class="file-row"><button class="btn btn-plain" id="choose-work">选择文件</button><span class="filename" id="work-filename">${esc(draft.workFile || '尚未选择')}</span>${draft.workFile ? '<button class="link-button" id="clear-work">移除</button>' : ''}</div></div><div class="editor-actions">${editing ? '<button class="btn btn-danger" id="delete-course">删除课程</button>' : ''}<button class="btn btn-plain" id="cancel-edit">取消</button><button class="btn btn-primary" id="save-course">保存课程</button></div></div></div>`;
   document.getElementById('choose-work').closest('.field').outerHTML = workTargetMarkup();
@@ -88,6 +94,7 @@ function drawEditor() {
     document.getElementById('question-list').before(hint);
   }
   view.querySelector('.toolbar .subtitle').textContent = '添加知识点与题目，并选择做题软件。';
+  if(!editing){const type=document.createElement('div');type.className='field course-kind';type.innerHTML='<label for="course-kind">课程类别</label><select id="course-kind"><option value="standard">普通课程</option><option value="programming">编程课程</option></select>';view.querySelector('.form-grid').prepend(type);type.querySelector('select').onchange=()=>{syncEditor();draft.kind='programming';draft.programming={files:[],entryFile:'',editorPath:''};drawEditor();};}
   document.getElementById('back-home').onclick = renderHome;
   document.getElementById('cancel-edit').onclick = renderHome;
   document.getElementById('add-question').onclick = () => { syncEditor(); draft.questions.push({ text: '', image: '' }); drawEditor(); };
@@ -120,7 +127,11 @@ function renderLesson(id) {
   currentCourseId = id; nav('home');
   view.innerHTML = `<div class="content"><button class="back" id="back-home">← 返回课程列表</button><header class="toolbar"><div><div class="eyebrow">STEP 01 / KNOWLEDGE</div><h1 class="page-title">${esc(course.title)}</h1><p class="subtitle">先理解知识点，再动手练习。</p></div></header><div class="lesson-layout"><article class="lesson-card"><div class="eyebrow">知识点介绍</div><div class="lesson-content">${esc(course.knowledge)}</div><div class="lesson-meta"><button class="btn btn-primary" id="finish-lesson">完成，开始做题 →</button></div></article><aside class="side-note"><div class="number">${String(course.questions.length).padStart(2, '0')}</div><h3>道练习题</h3><p>完成阅读后，右下角会出现题目悬浮窗。你可以在其他应用中作答。</p></aside></div></div>`;
   document.getElementById('back-home').onclick = renderHome;
-  document.getElementById('finish-lesson').onclick = () => startCourseMode(id, 'exercise');
+  if(course.kind==='programming'){
+    view.querySelector('.side-note').innerHTML='<h3>编程练习</h3><p>题目写在课程文件的注释中。进入后会打开课程工作区；保存文件后从悬浮窗进入提交界面。</p>';
+    document.getElementById('finish-lesson').textContent='完成，进入编程练习 →';
+    document.getElementById('finish-lesson').onclick=()=>renderProgrammingWorkspace(id);
+  } else document.getElementById('finish-lesson').onclick = () => startCourseMode(id, 'exercise');
   setupLessonChat(course);
   setupLessonReader(course);
 }
@@ -162,6 +173,7 @@ loadHome();
 document.getElementById('nav-settings').onclick=()=>renderSettings();
 window.study.onOpenSettings(options=>renderSettings(options));
 const sidebarToggle=document.getElementById('sidebar-toggle');
-function setSidebar(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);sidebarToggle.setAttribute('aria-expanded',String(!collapsed));sidebarToggle.setAttribute('aria-label',collapsed?'展开侧边栏':'收起侧边栏');sidebarToggle.title=collapsed?'展开侧边栏':'收起侧边栏';try{localStorage.setItem('sidebar-collapsed',String(collapsed));}catch{}}
+function setSidebar(collapsed){document.body.classList.toggle('sidebar-collapsed',collapsed);document.querySelector('.sidebar').inert=collapsed;sidebarToggle.setAttribute('aria-expanded',String(!collapsed));sidebarToggle.setAttribute('aria-label',collapsed?'展开侧边栏':'收起侧边栏');sidebarToggle.title=collapsed?'展开侧边栏':'收起侧边栏';try{localStorage.setItem('sidebar-collapsed',String(collapsed));}catch{}}
 try{setSidebar(localStorage.getItem('sidebar-collapsed')==='true');}catch{}
+requestAnimationFrame(()=>document.body.classList.add('motion-ready'));
 sidebarToggle.onclick=()=>setSidebar(!document.body.classList.contains('sidebar-collapsed'));

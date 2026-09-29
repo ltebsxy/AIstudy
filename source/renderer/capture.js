@@ -17,7 +17,7 @@ function draw() {
 window.study.onCaptureImage((data) => { image.src = data; });
 window.study.onCaptureQuestion((number) => { confirmButton.textContent = `保存第 ${number} 题并继续`; });
 window.study.onCapturePurpose((purpose) => {
-  if (purpose === 'chat') {
+  if (purpose === 'chat' || purpose === 'programming-chat') {
     confirmButton.textContent = '加入 AI 输入';
     document.querySelector('.capture-toolbar strong').textContent = '框选要向 AI 提问的内容';
   }

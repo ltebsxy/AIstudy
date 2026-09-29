@@ -16,14 +16,14 @@ class AIService {
     return {...visible,error:item.state==='error',...(item.state==='pending'&&item.role==='assistant'?{text:desktop?'请在 Codex 中继续。':'上次请求未完成，可重新提问。'}:{}),images:(files||[]).filter(f=>/\.(png|jpe?g|webp)$/i.test(f)&&fs.existsSync(f)).map(f=>({image:filePart(f).image_url.url})),...(desktop?{pending:desktop}:{})};
   }
   page(scope,courseId,before){
-    if(!['lesson','exercise','reading'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
+    if(!['lesson','exercise','reading','programming'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
     const result=this.history.page(this.settings.key(scope,courseId),before);
     return {...result,summary:this.history.summary(result.key),items:result.items.map(x=>this.publicItem(x))};
   }
-  async chat({scope,courseId,question,message,files=[],onUpdate}){
+  async chat({scope,courseId,question,message,historyPrompt,files=[],onUpdate}){
     if(this.active)throw new Error('上一条 AI 消息仍在处理中。');
     const config=this.settings.read(),key=this.settings.key(scope,courseId,config),previous=this.history.context(key);
-    const user=this.history.append(key,{role:'user',text:question,prompt:message,files,state:'pending'});
+    const user=this.history.append(key,{role:'user',text:question,prompt:historyPrompt??message,files,state:'pending'});
     const reply=this.history.append(key,{role:'assistant',text:'正在等待回复…',state:'pending'});
     this.active=new AbortController();
     try{
@@ -39,7 +39,7 @@ class AIService {
   }
   async compact({scope,courseId}){
     if(this.active)throw new Error('请等待当前 AI 回复完成再压缩。');
-    if(!['lesson','exercise','reading'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
+    if(!['lesson','exercise','reading','programming'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
     const config=this.settings.read();
     this.active=new AbortController();
     try{
@@ -66,7 +66,7 @@ class AIService {
   }
   clearContext({scope,courseId}){
     if(this.active)throw new Error('请等待当前 AI 回复完成再清除上下文。');
-    if(!['lesson','exercise','reading'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
+    if(!['lesson','exercise','reading','programming'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
     const config=this.settings.read();
     if(config.mode!=='api')throw new Error('清除上下文仅适用于 API 连接。');
     this.history.clearContext(this.settings.key(scope,courseId,config));

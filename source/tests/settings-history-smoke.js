@@ -17,11 +17,12 @@ async function main(){
  try{
   let page=await launch();const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.getByRole('button',{name:'设置',exact:true}).click();
-  await page.screenshot({path:path.join(root,'.tmp','settings-home.png')});assert.equal(await page.locator('#api-url').count(),0);await page.locator('#open-writing-settings').click();await page.locator('#default-writer').waitFor();
+  await page.locator('#api-url').waitFor();assert.equal(await page.locator('#settings-subnav').count(),0);await page.evaluate(()=>window.__settingsHeader=document.querySelector('.settings-tabs'));await page.locator('[data-settings-tab="writing"]').click();await page.locator('#default-writer').waitFor();assert(await page.evaluate(()=>window.__settingsHeader===document.querySelector('.settings-tabs')));
   await page.screenshot({path:path.join(root,'.tmp','writing-settings.png')});assert.equal(await page.locator('#default-writer').inputValue(),'builtin');await page.locator('#default-writer').selectOption('onenote');await page.locator('#default-onenote').fill('onenote:https://example.com/test');await page.locator('#save-writing-settings').click();await page.getByText('已保存默认写字程序。',{exact:true}).waitFor();
+  await page.locator('[data-settings-tab="workspaces"]').click();await page.getByRole('heading',{name:'练习工作区'}).waitFor();assert(await page.evaluate(()=>window.__settingsHeader===document.querySelector('.settings-tabs')));await page.locator('[data-settings-tab="writing"]').click();await page.locator('#default-writer').waitFor();assert(await page.evaluate(()=>window.__settingsHeader===document.querySelector('.settings-tabs')));
   await app.evaluate(({shell})=>{globalThis.writerURL='';shell.openExternal=async url=>{globalThis.writerURL=url;};});await page.evaluate(id=>window.study.startSession(id),course.id);assert.equal(await app.evaluate(()=>globalThis.writerURL),'onenote:https://example.com/test');await page.evaluate(()=>window.study.pauseSession());
-  await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#open-writing-settings').click();await page.locator('#default-writer').waitFor();assert.equal(await page.locator('#default-writer').inputValue(),'onenote');await page.locator('#default-writer').selectOption('builtin');await page.locator('#save-writing-settings').click();await page.getByText('已保存默认写字程序。',{exact:true}).waitFor();await page.locator('#writing-back').click();
-  await page.locator('#open-ai-settings').click();await page.locator('#api-url').waitFor();
+  await page.locator('[data-settings-tab="writing"]').click();await page.locator('#default-writer').waitFor();assert.equal(await page.locator('#default-writer').inputValue(),'onenote');await page.locator('#default-writer').selectOption('builtin');await page.locator('#save-writing-settings').click();await page.getByText('已保存默认写字程序。',{exact:true}).waitFor();await page.locator('#writing-back').click();
+  await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#api-url').waitFor();
   await page.locator('.harness-notice').getByText('存在诸多问题，建议不使用',{exact:true}).waitFor();
   await page.getByRole('button',{name:'DeepSeek · V4.1 Flash',exact:true}).click();
   assert.equal(await page.locator('#api-url').inputValue(),'https://api.deepseek.com');assert.equal(await page.locator('#api-model').inputValue(),'deepseek-flash');assert(await page.locator('[name="ai-mode"][value="api"]').isChecked());
@@ -33,7 +34,7 @@ async function main(){
   const saved=fs.readFileSync(path.join(data,'ai-settings.json'),'utf8');assert(!saved.includes('test-api-secret'));
   const publicConfig=await page.evaluate(()=>window.study.getAISettings());assert(!JSON.stringify(publicConfig).includes('encrypted'));assert(publicConfig.api.hasKey);
   await page.screenshot({path:path.join(root,'.tmp','ai-settings.png')});
-  await page.locator('#settings-back').click();await page.locator('#settings-home').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
+  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
   assert.equal(await page.locator('#lesson-ai-thread').count(),0);
   for(let i=1;i<=6;i++){
    await page.locator('#lesson-ai-input').fill(`问题 ${i}：`+'请保留定义的必要条件，并解释反函数定义域与值域的关系。'.repeat(4));await page.locator('#lesson-ai-send').click();
@@ -68,15 +69,15 @@ async function main(){
   await page.locator('#lesson-ai-clear').click();await page.locator('#lesson-ai-input').fill('清除之后重新提问');await page.locator('#lesson-ai-send').click();await page.waitForFunction(()=>document.querySelector('#lesson-ai-send').textContent==='发送');
   assert.deepEqual(requests.at(-1).body.messages.map(x=>x.role),['system','user']);assert(requests.at(-1).body.messages[1].content.includes('清除之后重新提问'));
   await page.screenshot({path:path.join(root,'.tmp','lesson-context-reset.png')});
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'收起侧边栏'}).click();assert.equal(await page.locator('.sidebar').isVisible(),false);
+  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'收起侧边栏'}).click();await page.locator('.sidebar').waitFor({state:'hidden'});
   await page.screenshot({path:path.join(root,'.tmp','sidebar-collapsed.png')});
   await app.close();app=null;page=await launch();
   assert.equal(await page.locator('.sidebar').isVisible(),false);await page.getByRole('button',{name:'展开侧边栏'}).click();
   await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===5);
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#open-ai-settings').click();await page.locator('#api-url').waitFor();
+  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#api-url').waitFor();
   await page.locator('[name="ai-mode"][value="harness"]').check();await page.locator('#harness-kind').selectOption('http');await page.locator('#harness-name').fill('OpenCode');await page.locator('#harness-url').fill(base+'/agent');await page.locator('#harness-session').fill('test-session');await page.locator('#harness-token').fill('test-harness-token');await page.locator('#save-settings').click();await page.getByText('已保存，当前使用 OpenCode。',{exact:true}).waitFor();
   const config=await page.evaluate(()=>window.study.getAISettings());assert(config.api.hasKey&&config.harness.hasToken);assert.equal(config.api.model,'deepseek-flash');assert.equal(config.api.systemPrompt,'测试自定义：用简洁中文解释，数学严谨。');
-  await page.locator('#settings-back').click();await page.locator('#settings-home').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
+  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===0&&!document.querySelector('#lesson-ai-send').disabled);
   await page.locator('#lesson-ai-input').fill('代理问题');await page.locator('#lesson-ai-send').click();await page.getByText('Harness 已回复',{exact:true}).waitFor();
   const last=requests.at(-1);assert.equal(last.auth,'Bearer test-harness-token');assert.equal(last.body.sessionId,'test-session');assert.equal(last.body.history.length,0);assert(last.body.message.includes('代理问题'));
@@ -88,8 +89,15 @@ async function main(){
   await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
   let overlay;for(const p of app.windows())if(await p.title()==='题目悬浮窗')overlay=p;
   overlay.on('pageerror',e=>errors.push(e.message));
+  await overlay.locator('#exercise-ball').waitFor({state:'visible'});assert.equal(await overlay.locator('#capture').isVisible(),false);await overlay.screenshot({path:path.join(root,'.tmp','external-exercise-ball.png')});
+  const ballOrigin=await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='题目悬浮窗').getPosition());
+  await overlay.locator('#exercise-ball').click();await overlay.locator('#capture').waitFor({state:'visible'});
+  await app.evaluate(({BrowserWindow})=>{const w=BrowserWindow.getAllWindows().find(w=>w.getTitle()==='题目悬浮窗');const [x,y]=w.getPosition();w.setPosition(x-60,y-60);});
+  await overlay.locator('#collapse-exercise').click();await overlay.locator('#exercise-ball').waitFor({state:'visible'});assert.equal(await overlay.locator('#content').isVisible(),false);await overlay.waitForFunction(()=>innerWidth===66&&innerHeight===66);
+  assert.deepEqual(await app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='题目悬浮窗').getPosition()),ballOrigin);
+  await overlay.locator('#exercise-ball').click();await overlay.locator('#capture').waitFor({state:'visible'});
   await overlay.locator('#toggle-chat').click();
-  async function capture(chat){const pending=app.waitForEvent('window',{predicate:async p=>{await p.waitForLoadState();return await p.title()==='框选截图';}});await overlay.locator('#capture').click();const cap=await pending;await cap.getByText(chat?'框选要向 AI 提问的内容':'框选需要提交的作答区域').waitFor();await cap.mouse.move(100,150);await cap.mouse.down();await cap.mouse.move(240,240);await cap.mouse.up();await cap.getByRole('button',{name:chat?'加入 AI 输入':'保存第 1 题并继续'}).click();}
+  async function capture(chat){const pending=app.waitForEvent('window',{predicate:async p=>{await p.waitForLoadState();return await p.title()==='框选截图';}});await overlay.locator('#capture').click();const cap=await pending;await cap.getByText(chat?'框选要向 AI 提问的内容':'框选需要提交的作答区域').waitFor();await cap.evaluate(()=>window.study.commitCapture({x:100,y:150,width:140,height:90})).catch(e=>{if(!cap.isClosed())throw e;});}
   await capture(true);await overlay.locator('.chat-attachment').waitFor();const image=await overlay.locator('.chat-attachment img').getAttribute('src');
   assert.equal(await overlay.locator('#chat-settings').count(),0);
   const selector=await overlay.locator('#chat-ai-mode').boundingBox(),composer=await overlay.locator('#chat-input').boundingBox();assert(selector.y<composer.y);assert(selector.x<60);

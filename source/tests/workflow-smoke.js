@@ -32,6 +32,7 @@ async function main(){
     await page.screenshot({path:path.join(root,'.tmp','lesson-ai.png')});
     await page.getByRole('button',{name:'关闭提问'}).click();
     await page.getByRole('button',{name:'完成，开始做题'}).click();
+    await overlay.locator('#exercise-ball').click();await overlay.locator('#capture').waitFor({state:'visible'});
     await overlay.getByText('第一个问题',{exact:false}).waitFor();
     const visible=()=>app.evaluate(({BrowserWindow})=>BrowserWindow.getAllWindows().find(w=>w.getTitle()==='AI-StudyDesk').isVisible());
     async function capture(number,width,cancel=false){

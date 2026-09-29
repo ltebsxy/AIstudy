@@ -1,7 +1,21 @@
 const $=id=>document.getElementById(id),canvas=$('paper'),ctx=canvas.getContext('2d'),background=$('document-layer'),bg=background.getContext('2d'),area=$('paper-area');
 let course=null,index=0,pages=[],legacy={},board=StudyBoard.normalize(),ready=false,busy=false,tool='pen',active=null,panning=null,redo=[],readerPages=0,cache=new Map(),pending=new Set(),renderQueue=Promise.resolve(),saveChain=Promise.resolve(),saveError=null,generation=0,origin=0,frame=0,saveTimer=0,restoring=false;
-let screenWidth=1,screenHeight=1,dpr=1,aiVisible=false;
-function aiState(visible){aiVisible=visible;$('writer-ai-panel').hidden=!visible;$('toggle-ai').setAttribute('aria-pressed',String(visible));$('toggle-ai').title=(visible?'关闭':'打开')+' AI 问答';}
+let screenWidth=1,screenHeight=1,dpr=1,aiVisible=false,aiMotionState=null,aiAnimation=null;
+function aiState(visible){
+  if(aiMotionState===visible)return;
+  aiMotionState=visible;aiVisible=visible;
+  const panel=$('writer-ai-panel'),reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  aiAnimation?.cancel();aiAnimation=null;
+  if(visible){
+    panel.hidden=false;panel.inert=false;
+    if(!reduce)aiAnimation=panel.animate([{opacity:0,transform:'translateY(10px) scale(.98)'},{opacity:1,transform:'none'}],{duration:180,easing:'ease-out'});
+  }else{
+    panel.inert=true;
+    if(reduce||panel.hidden)panel.hidden=true;
+    else{aiAnimation=panel.animate([{opacity:1,transform:'none'},{opacity:0,transform:'translateY(10px) scale(.98)'}],{duration:150,easing:'ease-in'});aiAnimation.onfinish=()=>{if(!aiVisible)panel.hidden=true;aiAnimation=null;};}
+  }
+  $('toggle-ai').setAttribute('aria-pressed',String(visible));$('toggle-ai').title=(visible?'关闭':'打开')+' AI 问答';
+}
 window.study.onWriterAIVisibility(aiState);
 const reading=()=>course?.sessionMode==='reading';
 function status(text){$('save-status').textContent=text;}

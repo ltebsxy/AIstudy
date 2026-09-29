@@ -8,6 +8,7 @@ function setupLessonChat(course) {
   panel.innerHTML = '<header><strong>侧边聊天</strong><button class="icon-button" id="close-lesson-ai" aria-label="关闭提问">×</button></header><div class="context-actions"><button id="lesson-ai-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">压缩上下文</button><button id="lesson-ai-reset" class="compact-button" title="清除当前 API 对话的历史上下文和摘要；本地聊天记录保留" hidden>清除上下文</button></div><div id="lesson-ai-messages" class="lesson-ai-messages"></div><div id="lesson-ai-status" role="status"></div><button id="lesson-ai-clear" class="link-button" hidden>清除选取</button><button id="lesson-ai-desktop" class="btn btn-plain" hidden>在 Codex 中继续</button><textarea id="lesson-ai-input" placeholder="输入问题…" rows="3" maxlength="2500"></textarea><div class="ai-compose-actions"><select id="lesson-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button id="lesson-ai-send" class="btn btn-primary">发送</button></div>';
   document.body.append(panel);
   const floating=setupFloatingChat(panel);
+  let panelAnimation=null,panelClosing=false;
   const fragments=document.createElement('div');fragments.className='lesson-fragments';fragments.id='lesson-fragments';
   panel.querySelector('textarea').before(fragments);
   const toggle=document.createElement('button');toggle.className='btn btn-soft';toggle.id='ask-lesson-ai';toggle.textContent='问 AI';
@@ -63,9 +64,21 @@ function setupLessonChat(course) {
     finally{if(generation===historyGeneration){loadingHistory=false;if(panel.isConnected){send.disabled=switching;compactButton.disabled=state.busy||switching||!connection;resetButton.disabled=state.busy||switching||!connection;const more=list.querySelector('.history-more');if(more)more.disabled=state.busy;}}}
   }
   list.onscroll=()=>{const top=list.scrollTop;if(top<lastScroll&&top<16&&historyPage.hasMore&&!loadingHistory&&!state.busy)load(false);lastScroll=top;};
-  function open() {panel.hidden=false;floating.show();render();if(!state.busy)load(true);input.focus();}
-  toggle.onclick=()=>{if(panel.hidden)open();else{panel.hidden=true;layout.classList.remove('with-ai');}};
-  panel.querySelector('#close-lesson-ai').onclick=()=>{panel.hidden=true;layout.classList.remove('with-ai');};
+  function open() {
+    panelAnimation?.cancel();panelAnimation=null;panelClosing=false;panel.hidden=false;panel.inert=false;
+    floating.show();
+    if(!matchMedia('(prefers-reduced-motion: reduce)').matches)panelAnimation=panel.animate([{opacity:0,transform:'translateY(8px) scale(.98)'},{opacity:1,transform:'none'}],{duration:180,easing:'ease-out'});
+    render();if(!state.busy)load(true);input.focus();
+  }
+  function close(){
+    if(panel.hidden||panelClosing)return;
+    panelClosing=true;panel.inert=true;panelAnimation?.cancel();panelAnimation=null;layout.classList.remove('with-ai');
+    if(matchMedia('(prefers-reduced-motion: reduce)').matches){panel.hidden=true;return;}
+    panelAnimation=panel.animate([{opacity:1,transform:'none'},{opacity:0,transform:'translateY(8px) scale(.98)'}],{duration:150,easing:'ease-in'});
+    panelAnimation.onfinish=()=>{if(panelClosing)panel.hidden=true;panelAnimation=null;};
+  }
+  toggle.onclick=()=>{if(panel.hidden||panelClosing)open();else close();};
+  panel.querySelector('#close-lesson-ai').onclick=close;
   clear.onclick=()=>{state.fragments=[];render();input.focus();};
   const disposeSelection=setupLessonSelection(layout.querySelector('.lesson-content'),text=>{
     if(state.fragments.includes(text)){open();return;}
@@ -109,6 +122,6 @@ function setupLessonChat(course) {
   desktop.onclick=async()=>{if(!state.pending||state.busy)return;const target=state.messages.findLast(m=>m.pending===state.pending)||state.messages.at(-1);state.busy=true;render();try{target.text=await window.study.continueInCodex(state.pending);delete target.pending;state.pending=state.messages.findLast(m=>m.pending)?.pending||null;}catch(e){state.status=e.message;}finally{state.busy=false;render();}};
   const unsubscribe=window.study.onLessonAnswer(text=>{if(state.busy&&!compacting&&state.messages.length){state.messages[state.messages.length-1].text=text;render();}});
   const settingsChanged=window.study.onAISettings(config=>{updateConnection(config);state.status='';state.messages=[];state.pending=null;load(true);});
-  disposeLessonChat=()=>{historyGeneration++;settingsChanged();disposeSelection();floating.dispose();panel.remove();unsubscribe();};
+  disposeLessonChat=()=>{historyGeneration++;panelAnimation?.cancel();settingsChanged();disposeSelection();floating.dispose();panel.remove();unsubscribe();};
   render();load(true);
 }
