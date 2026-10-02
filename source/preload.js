@@ -1,7 +1,13 @@
 // SPDX-FileCopyrightText: 2026 ltebsxy
 // SPDX-License-Identifier: GPL-3.0-only
 const { contextBridge, ipcRenderer } = require('electron');
+let currentTheme=ipcRenderer.sendSync('theme:initial');
+ipcRenderer.on('theme:changed',(_event,state)=>{currentTheme=state;});
 contextBridge.exposeInMainWorld('study', {
+  themeSnapshot: () => currentTheme,
+  getTheme: () => ipcRenderer.invoke('theme:get'),
+  saveTheme: mode => ipcRenderer.invoke('theme:save',mode),
+  onTheme: callback => {const listener=(_event,state)=>callback(state);ipcRenderer.on('theme:changed',listener);return ()=>ipcRenderer.removeListener('theme:changed',listener);},
   getWritingSettings: () => ipcRenderer.invoke('writing:settings:get'),
   saveWritingSettings: (input) => ipcRenderer.invoke('writing:settings:save', input),
   getAISettings: () => ipcRenderer.invoke('ai:settings:get'),
@@ -44,6 +50,9 @@ contextBridge.exposeInMainWorld('study', {
   programmingShowSubmission: id => ipcRenderer.invoke('programming:showSubmission',id),
   onProgrammingSubmission: callback => ipcRenderer.on('programming:submissionReady',(_event,details)=>callback(details)),
   programmingSubmit: input => ipcRenderer.invoke('programming:submit',input),
+  programmingGrade: submissionId => ipcRenderer.invoke('programming:grade',submissionId),
+  programmingExport: submissionId => ipcRenderer.invoke('programming:export',submissionId),
+  onProgrammingGradeProgress: callback => ipcRenderer.on('programming:gradeProgress',(_event,data)=>callback(data)),
   programmingWorkspaces: () => ipcRenderer.invoke('programming:workspaces'),
   programmingClearWorkspace: id => ipcRenderer.invoke('programming:clearWorkspace',id),
   deleteCourse: (id) => ipcRenderer.invoke('courses:delete', id),
@@ -62,6 +71,7 @@ contextBridge.exposeInMainWorld('study', {
   onOpenChat: callback => ipcRenderer.on('chat:open',()=>callback()),
   openWriter: () => ipcRenderer.invoke('writer:open'),
   readerSource: input => ipcRenderer.invoke('reader:source', input),
+  lookupEnglishWord: input => ipcRenderer.invoke('reader:lookup', input),
   writerLoad: () => ipcRenderer.invoke('writer:load'),
   writerSave: (data) => ipcRenderer.invoke('writer:save', data),
   writerSubmit: (input) => ipcRenderer.invoke('writer:submit', input),

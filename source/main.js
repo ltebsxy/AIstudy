@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 ltebsxy
 // SPDX-License-Identifier: GPL-3.0-only
-const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage, nativeTheme } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 // Keep the existing data and Chromium storage after changing the product name.
@@ -45,6 +45,10 @@ const { AIService } = require('./lib/ai-service');
 const { Library } = require('./lib/library');
 const { extensions:readingExtensions,inspectDocument,normalizeReadingAnnotations }=require('./lib/reading-document');
 const { ProgrammingWorkspaces, importFolder, validateFiles } = require('./lib/programming-workspace');
+const { ProgrammingSubmissions } = require('./lib/programming-submission');
+const { expandedBounds } = require('./lib/floating-bounds');
+const { EnglishDictionary } = require('./lib/english-dictionary');
+const englishDictionary=new EnglishDictionary();
 
 
 let mainWindow;
@@ -95,10 +99,40 @@ const executableFolder=path.dirname(process.execPath);
 const libraryRoot=process.env.STUDY_DATA_DIR?path.join(app.getPath('userData'),'library'):app.isPackaged?path.join(path.basename(executableFolder)==='win-unpacked'?path.dirname(executableFolder):executableFolder,'data'):path.resolve(__dirname,'../app/data');
 const library=new Library(libraryRoot);
 const programmingWorkspaces=new ProgrammingWorkspaces(app.getPath('userData'));
+const programmingSubmissions=new ProgrammingSubmissions(app.getPath('userData'));
 function dataFile() { return path.join(app.getPath('userData'), 'courses.json'); }
 function readPreferences() {
   try { return JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'preferences.json'), 'utf8')); }
   catch { return {}; }
+}
+function themeState() { return {mode:nativeTheme.themeSource,dark:nativeTheme.shouldUseDarkColors}; }
+function broadcastTheme() {
+  const state=themeState();
+  for(const win of BrowserWindow.getAllWindows()){
+    if(win===mainWindow)win.setBackgroundColor(state.dark?'#181b1a':'#f7f6f2');
+    if(win===writerWindow)win.setBackgroundColor(state.dark?'#1b1f1d':'#ffffff');
+    win.webContents.send('theme:changed',state);
+  }
+}
+// Public appearance state is available during preload, before the first paint.
+ipcMain.on('theme:initial',event=>{event.returnValue=themeState();});
+nativeTheme.on('updated',broadcastTheme);
+function importDirectory(kind) {
+  const saved=readPreferences().importDirectories?.[kind];
+  if(typeof saved==='string'){
+    try { if(fs.statSync(saved).isDirectory())return saved; } catch {}
+  }
+  const generated=path.join(__dirname,'output','courses');
+  if(!app.isPackaged){
+    try { if(fs.statSync(generated).isDirectory())return generated; } catch {}
+  }
+  return app.getPath('downloads');
+}
+function rememberImportDirectory(kind,file) {
+  const preferences=readPreferences();
+  const target=path.join(app.getPath('userData'),'preferences.json');
+  fs.writeFileSync(`${target}.tmp`,JSON.stringify({...preferences,importDirectories:{...preferences.importDirectories,[kind]:path.dirname(file)}},null,2));
+  fs.renameSync(`${target}.tmp`,target);
 }
 function selectThread(id) {
   if (id && !/^[0-9a-f-]{20,}$/i.test(id)) throw new Error('无效的 Codex 任务。');
@@ -218,14 +252,15 @@ async function resizeProgrammingChat(win,expanded,animate=false){
   if(expanded&&!wasExpanded)programmingBallPosition={x:bounds.x,y:bounds.y};
   if(!programmingBallPosition)programmingBallPosition={x:bounds.x,y:bounds.y};
   const width=expanded?420:66,height=expanded?560:66;
+  const target=expanded?expandedBounds(programmingBallPosition,{width,height},screen.getDisplayNearestPoint({x:programmingBallPosition.x+33,y:programmingBallPosition.y+33}).workArea):{...programmingBallPosition,width,height};
   win.setResizable(true);win.setMinimumSize(66,66);
   if(!expanded)win.webContents.send('programming:chatMode',false);
   if(!expanded&&animate&&wasExpanded)await waitForCollapsedFrame(win);
   if(programmingChatExpanded!==Boolean(expanded)||win.isDestroyed())return;
   if(expanded){win.show();win.focus();}
-  const completed=await transitionBounds(win,{x:programmingBallPosition.x,y:programmingBallPosition.y,width,height},animate?110:0);
+  const completed=await transitionBounds(win,target,animate?110:0);
   if(!completed||win.isDestroyed())return;
-  win.setMinimumSize(expanded?360:66,expanded?400:66);win.setResizable(Boolean(expanded));
+  win.setMinimumSize(expanded?Math.min(360,target.width):66,expanded?Math.min(400,target.height):66);win.setResizable(Boolean(expanded));
   if(expanded)win.webContents.send('programming:chatMode',true);
   if(!expanded){if(mainWindow?.isFocused())win.hide();else win.showInactive();}
 }
@@ -237,14 +272,15 @@ async function resizeExternalExercise(expanded,animate=false){
   if(expanded&&!wasExpanded)externalExerciseBallPosition={x:bounds.x,y:bounds.y};
   if(!externalExerciseBallPosition)externalExerciseBallPosition={x:bounds.x,y:bounds.y};
   const width=expanded?430:66,height=expanded?560:66;
+  const target=expanded?expandedBounds(externalExerciseBallPosition,{width,height},screen.getDisplayNearestPoint({x:externalExerciseBallPosition.x+33,y:externalExerciseBallPosition.y+33}).workArea):{...externalExerciseBallPosition,width,height};
   overlayWindow.setResizable(true);overlayWindow.setMinimumSize(66,66);
   if(!expanded)overlayWindow.webContents.send('overlay:expanded',false);
   if(!expanded&&animate&&wasExpanded)await waitForCollapsedFrame(overlayWindow);
   if(externalExerciseExpanded!==Boolean(expanded)||overlayWindow.isDestroyed())return;
   if(expanded){overlayWindow.show();overlayWindow.focus();}
-  const completed=await transitionBounds(overlayWindow,{x:externalExerciseBallPosition.x,y:externalExerciseBallPosition.y,width,height},animate?110:0);
+  const completed=await transitionBounds(overlayWindow,target,animate?110:0);
   if(!completed||overlayWindow.isDestroyed())return;
-  overlayWindow.setMinimumSize(expanded?360:66,expanded?420:66);overlayWindow.setResizable(Boolean(expanded));
+  overlayWindow.setMinimumSize(expanded?Math.min(360,target.width):66,expanded?Math.min(420,target.height):66);overlayWindow.setResizable(Boolean(expanded));
   if(expanded)overlayWindow.webContents.send('overlay:expanded',true);
   if(!expanded)overlayWindow.showInactive();
 }
@@ -291,7 +327,7 @@ function sendSession(win) { win.webContents.send('session:course',sessionCourse(
 async function openWriter() {
   if (!activeCourse || !exercise) throw new Error('请先进入做题或读写模式。');
   if (writerWindow && !writerWindow.isDestroyed()) {writerWindow.show();writerWindow.focus();return true;}
-  const win=new BrowserWindow({width:1000,height:820,minWidth:640,minHeight:520,backgroundColor:'#edf2ef',autoHideMenuBar:true,webPreferences:webPreferences()});
+  const win=new BrowserWindow({width:1000,height:820,minWidth:640,minHeight:520,backgroundColor:nativeTheme.shouldUseDarkColors?'#1b1f1d':'#ffffff',autoHideMenuBar:true,webPreferences:webPreferences()});
   writerWindow=win;writerAIShown=false;overlayWindow.hide();
   win.webContents.on('will-navigate',event=>event.preventDefault());win.webContents.setWindowOpenHandler(()=>({action:'deny'}));
   win.on('close',event=>{if(mainWindow&&!mainWindow.isDestroyed()){event.preventDefault();win.hide();overlayWindow.hide();mainWindow.show();mainWindow.webContents.send('session-paused',pausedState());}});
@@ -326,15 +362,17 @@ function storeProgrammingChatImage(bytes){
 async function readingTarget(course) {
   const target=normalizeWorkTarget(course);
   let file=target.filePath;
+  let selectedFile=false;
   if(!file || !readingExtensions.includes(path.extname(file).slice(1).toLowerCase()) || !fs.existsSync(file)){
-    const selected=await dialog.showOpenDialog(mainWindow,{title:'选择读写文件',properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
-    if(selected.canceled)return null;file=selected.filePaths[0];
+    const selected=await dialog.showOpenDialog(mainWindow,{title:'选择读写文件',defaultPath:importDirectory('reading'),properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
+    if(selected.canceled)return null;file=selected.filePaths[0];selectedFile=true;
   }
   inspectDocument(file);
+  if(selectedFile)rememberImportDirectory('reading',file);
   return {...course,workTarget:target.type==='app'&&target.appPath?{...target,filePath:file}:{type:'file',filePath:file}};
 }
 function createWindows() {
-  mainWindow = new BrowserWindow({ title:'AI-StudyDesk', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: '#f6f4ee', autoHideMenuBar: true, webPreferences: webPreferences() });
+  mainWindow = new BrowserWindow({ title:'AI-StudyDesk', width: 1120, height: 760, minWidth: 850, minHeight: 620, backgroundColor: nativeTheme.shouldUseDarkColors?'#181b1a':'#f7f6f2', autoHideMenuBar: true, webPreferences: webPreferences() });
   const homeLoaded=mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
   mainWindow.on('focus',()=>{if(programmingExternalActive&&!programmingChatExpanded&&programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.hide();});
   mainWindow.on('blur',()=>{if(programmingExternalActive&&!programmingChatExpanded&&programmingChatWindow&&!programmingChatWindow.isDestroyed())programmingChatWindow.showInactive();});
@@ -411,7 +449,16 @@ async function beginCapture(purpose = 'answer') {
 }
 
 app.whenReady().then(() => {
+  const savedTheme=readPreferences().theme;
+  nativeTheme.themeSource=['light','dark','system'].includes(savedTheme)?savedTheme:'system';
   createWindows();
+  register('theme:get',themeState);
+  register('theme:save',mode=>{
+    if(!['light','dark','system'].includes(mode))throw new Error('无效的外观主题。');
+    const file=path.join(app.getPath('userData'),'preferences.json');
+    fs.writeFileSync(file+'.tmp',JSON.stringify({...readPreferences(),theme:mode},null,2));fs.renameSync(file+'.tmp',file);
+    nativeTheme.themeSource=mode;broadcastTheme();return themeState();
+  });
   register('writing:settings:get', () => validateDefaultWriter(readPreferences().defaultWorkTarget));
   register('writing:settings:save', input => {
     const target=validateDefaultWriter(input);
@@ -452,8 +499,11 @@ app.whenReady().then(() => {
   register('library:assign',input=>library.assign(input,readCourses().map(c=>c.id)));
   register('library:select',input=>library.select(input));
   register('library:importPDF',async input=>{
-    const result=await dialog.showOpenDialog(mainWindow,{title:'导入读写文件',properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
-    return result.canceled?null:library.importPDF(result.filePaths[0],input);
+    const result=await dialog.showOpenDialog(mainWindow,{title:'导入读写文件',defaultPath:importDirectory('reading'),properties:['openFile'],filters:[{name:'支持的文件',extensions:readingExtensions}]});
+    if(result.canceled)return null;
+    const imported=library.importPDF(result.filePaths[0],input);
+    rememberImportDirectory('reading',result.filePaths[0]);
+    return imported;
   });
   register('courses:list', () => readCourses().map(learnerCourse));
   register('courses:sync', async knownRevision => {
@@ -463,7 +513,7 @@ app.whenReady().then(() => {
     const after=revision();return {revision:before===after?after:null,courses:Array.isArray(data)?data.map(learnerCourse):[]};
   });
   register('courses:importFile', async () => {
-    const result = await dialog.showOpenDialog(mainWindow, { title: '导入课程 JSON', properties: ['openFile'], filters: [{ name: '课程 JSON', extensions: ['json'] }] });
+    const result = await dialog.showOpenDialog(mainWindow, { title: '导入课程 JSON', defaultPath:importDirectory('courses'), properties: ['openFile'], filters: [{ name: '课程 JSON', extensions: ['json'] }] });
     if (result.canceled) return null;
     const file = result.filePaths[0];
     if (fs.statSync(file).size > 24 * 1024 * 1024) throw new Error('课程文件不能超过 24 MB。');
@@ -472,6 +522,7 @@ app.whenReady().then(() => {
     catch { throw new Error('无法读取课程 JSON，请检查文件格式。'); }
     const course = normalizeCourse({ ...raw, workTarget: { type: 'default' },...(raw?.kind==='programming'?{programming:{...raw.programming,editorPath:''}}:{}) });
     writeCourses([course, ...readCourses()]);
+    rememberImportDirectory('courses',file);
     return learnerCourse(course);
   });
   register('courses:save', (raw) => {
@@ -585,6 +636,7 @@ app.whenReady().then(() => {
     return {token:pendingProgrammingSubmission.token,files};
   });
   register('programming:showSubmission', id => {
+    if(gradingBusy||aiService.active)throw new Error('请等待当前 AI 回复完成后再提交。');
     if(id!==programmingCourseId||!programmingExternalActive)throw new Error('当前没有进行中的编程练习。');
     const files=programmingWorkspaces.list(id).map(file=>programmingWorkspaces.read(id,file));
     pendingProgrammingSubmission={token:randomUUID(),courseId:id,files};
@@ -599,14 +651,34 @@ app.whenReady().then(() => {
     const pending=pendingProgrammingSubmission;
     if(!pending||pending.courseId!==id||pending.token!==token)throw new Error('提交预览已失效，请重新预览。');
     const files=pending.files;
+    if(JSON.stringify(programmingWorkspaces.list(id))!==JSON.stringify(files.map(file=>file.path)))throw new Error('工作区文件已增删，请重新预览后提交。');
     for(const item of files)if(programmingWorkspaces.read(id,item.path).hash!==item.hash)throw new Error(`文件已变化：${item.path}。请重新预览后提交。`);
-    const root=path.join(app.getPath('userData'),'programming-submissions');
-    const folder=path.join(root,`${id}-${new Date().toISOString().replace(/[:.]/g,'-')}`);
-    fs.mkdirSync(folder,{recursive:true});
-    for(const item of files){const target=path.join(folder,...item.path.split('/'));fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,item.content,'utf8');}
-    fs.writeFileSync(path.join(folder,'submission.json'),JSON.stringify({courseId:id,title:course.title,submittedAt:new Date().toISOString(),files:files.map(({path,hash})=>({path,hash}))},null,2));
+    const submission=programmingSubmissions.create(course,files);
     pendingProgrammingSubmission=null;
-    return folder;
+    return submission;
+  });
+  register('programming:grade', async submissionId => {
+    if(gradingBusy||aiService.active)throw new Error('请等待当前 AI 回复完成。');
+    const snapshot=programmingSubmissions.read(submissionId);
+    if(snapshot.courseId!==programmingCourseId)throw new Error('编程练习已切换，请重新进入提交页。');
+    const message=programmingSubmissions.prompt(submissionId),config=aiSettings.read();
+    gradingBusy=true;
+    try{
+      const report=await aiService.direct(config,message,[],text=>{
+        if(mainWindow&&!mainWindow.isDestroyed())mainWindow.webContents.send('programming:gradeProgress',{submissionId,text});
+      });
+      if(report?.needsDesktop)throw new Error('该 Codex 任务正由桌面管理，请从 Codex 重新启动软件后批改。');
+      const folder=programmingSubmissions.saveReport(submissionId,report);
+      return {report,folder};
+    }finally{gradingBusy=false;}
+  });
+  register('programming:export', async submissionId => {
+    const snapshot=programmingSubmissions.read(submissionId);
+    const safeTitle=snapshot.title.replace(/[<>:"/\\|?*\x00-\x1f]/g,'_').slice(0,40);
+    const output=await dialog.showSaveDialog(mainWindow,{title:'保存编程作答包',defaultPath:`${safeTitle}-提交.zip`,filters:[{name:'ZIP 压缩包',extensions:['zip']}]});
+    if(output.canceled||!output.filePath)return null;
+    fs.writeFileSync(output.filePath,programmingSubmissions.archive(submissionId));
+    return {file:output.filePath,folder:path.dirname(output.filePath)};
   });
   register('programming:workspaces', () => programmingWorkspaces.entries().map(item=>({...item,title:readCourses().find(c=>c.id===item.courseId)?.title||'已删除的课程'})));
   register('programming:clearWorkspace', id => {
@@ -678,6 +750,12 @@ app.whenReady().then(() => {
     const info=inspectDocument(activeReading.file),bytes=await fs.promises.readFile(info.file);
     if(requested!==sessionId)throw new Error('当前文件已改变。');
     return {kind:info.kind,extension:info.extension,mime:info.mime,bytes};
+  });
+  register('reader:lookup',async({sessionId:requested,word})=>{
+    if(sessionMode!=='reading'||!activeReading||requested!==sessionId)throw new Error('当前阅读文件已改变。');
+    const result=await englishDictionary.lookup(word);
+    if(requested!==sessionId)throw new Error('当前阅读文件已改变。');
+    return result;
   });
   register('writer:load',()=>{
     if(sessionMode==='reading'){

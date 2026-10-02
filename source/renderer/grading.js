@@ -12,6 +12,13 @@ function renderGradingReport(element, text) {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (!line) continue;
+    if (/^```/.test(line)) {
+      const code=[];
+      while(i+1<lines.length&&!/^```/.test(lines[i+1].trim()))code.push(lines[++i]);
+      if(/^```/.test(lines[i+1]?.trim()||''))i++;
+      const pre=document.createElement('pre');pre.textContent=protectedMath.restore(code.join('\n'));
+      element.append(pre);continue;
+    }
     if (line.includes('|') && lines[i + 1] && /^\|?\s*:?-{3,}/.test(lines[i + 1].trim())) {
       const wrapper = document.createElement('div'); wrapper.className = 'grade-table';
       const table = document.createElement('table');

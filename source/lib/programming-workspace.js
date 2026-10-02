@@ -8,8 +8,8 @@ const MAX_FILES = 200;
 const MAX_BYTES = 10 * 1024 * 1024;
 const SKIP = new Set(['.git', 'node_modules', '.venv', 'dist', 'build']);
 
-function relativeFile(value) {
-  if (typeof value !== 'string' || !value || value.length > 300 || value.includes('\\') || value.includes('\0')) throw new Error('文件路径无效。');
+function relativeFile(value, maxLength = 300) {
+  if (typeof value !== 'string' || !value || value.length > maxLength || value.includes('\\') || value.includes('\0')) throw new Error('文件路径无效。');
   const parts = value.split('/');
   if (parts.some(part => !part || part === '.' || part === '..' || /[<>:"|?*\x00-\x1f]/.test(part) || /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i.test(part))) throw new Error('文件路径无效。');
   return parts.join('/');
@@ -138,4 +138,4 @@ class ProgrammingWorkspaces {
     });
   }
 }
-module.exports = { ProgrammingWorkspaces, validateFiles, importFolder, relativeFile };
+module.exports = { ProgrammingWorkspaces, validateFiles, importFolder, relativeFile, resolveFile };

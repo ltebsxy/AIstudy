@@ -1,6 +1,7 @@
 # Dependencies and build outputs
 node_modules/
 /app/
+/temp/
 release/
 dist/
 output/

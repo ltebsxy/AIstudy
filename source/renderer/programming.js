@@ -31,6 +31,62 @@ function renderProgrammingSubmission(id,preview){
   view.innerHTML=`<div class="content programming-submission"><button class="back" id="programming-resume">← 返回练习</button><header class="toolbar"><div><div class="eyebrow">REVIEW SUBMISSION</div><h1 class="page-title">确认提交 · ${esc(course.title)}</h1><p class="subtitle">请先在外部程序保存，再检查以下文件；提交后会保存一份独立快照。</p></div></header><div class="editor-card"><p>共 ${files.length} 个文件</p>${files.map(file=>`<details><summary>${esc(file.path)}</summary><pre>${esc(file.content)}</pre></details>`).join('')}<div class="editor-actions"><button class="btn btn-plain" id="programming-leave">结束练习</button><button class="btn btn-primary" id="programming-confirm">确认提交</button></div></div></div>`;
   document.getElementById('programming-resume').onclick=()=>renderProgrammingWorkspace(id);
   document.getElementById('programming-leave').onclick=async()=>{try{await window.study.programmingLeave(id);renderLesson(id);}catch(e){errorMessage(e);}};
-  document.getElementById('programming-confirm').onclick=async()=>{const button=document.getElementById('programming-confirm');button.disabled=true;try{const folder=await window.study.programmingSubmit({id,token:preview.token});view.innerHTML=`<div class="content"><h1 class="page-title">已保存提交快照</h1><p>位置：${esc(folder)}</p><div class="programming-toolbar"><button class="btn btn-plain" id="programming-open-submission">打开文件夹</button><button class="btn btn-plain" id="programming-leave">结束练习</button><button class="btn btn-primary" id="programming-done">继续练习</button></div></div>`;document.getElementById('programming-open-submission').onclick=()=>window.study.openFolder(folder).catch(errorMessage);document.getElementById('programming-leave').onclick=async()=>{try{await window.study.programmingLeave(id);renderLesson(id);}catch(e){errorMessage(e);}};document.getElementById('programming-done').onclick=()=>renderProgrammingWorkspace(id);}catch(e){errorMessage(e);button.disabled=false;}};
+  document.getElementById('programming-confirm').onclick=async()=>{
+    const button=document.getElementById('programming-confirm');button.disabled=true;
+    try{renderProgrammingSubmitted(id,await window.study.programmingSubmit({id,token:preview.token}));}
+    catch(e){errorMessage(e);button.disabled=false;}
+  };
+}
+function renderProgrammingSubmitted(id,submission){
+  const course=byId(id);if(!course)return renderHome();
+  currentCourseId=id;nav('home');
+  view.innerHTML=`<div class="content programming-submission"><header class="toolbar"><div><div class="eyebrow">SUBMISSION</div><h1 class="page-title">已保存提交快照</h1><p class="subtitle">${esc(course.title)} · 选择 AI 批改，或打包保存本次作答。</p></div></header><div class="editor-card"><div class="programming-toolbar"><button class="btn btn-primary" id="programming-grade">AI 批改</button><button class="btn btn-plain" id="programming-package">打包 ZIP</button><button class="btn btn-plain" id="programming-cancel-grade" hidden>停止等待</button></div><p class="target-help" id="programming-grade-connection">使用 AI 设置中的当前连接。</p><p class="target-help">作答包包含课程原题与本次提交文件；批改后打包会附上批改结果。</p><p id="programming-package-status" role="status"></p><section class="grading-result" id="programming-grade-result" hidden><h3>AI 批改结果</h3><div id="programming-grade-status" role="status"></div><div class="programming-grade-report" id="programming-grade-report" data-submission="${esc(submission.submissionId)}"></div></section><div class="divider"></div><div class="programming-toolbar"><button class="btn btn-plain" id="programming-open-submission">打开提交文件夹</button><button class="btn btn-plain" id="programming-leave">结束练习</button><button class="btn btn-plain" id="programming-done">继续练习</button></div></div></div>`;
+  const grade=document.getElementById('programming-grade'),pack=document.getElementById('programming-package');
+  const cancel=document.getElementById('programming-cancel-grade'),status=document.getElementById('programming-grade-status');
+  const result=document.getElementById('programming-grade-result'),report=document.getElementById('programming-grade-report');
+  const packStatus=document.getElementById('programming-package-status'),connection=document.getElementById('programming-grade-connection');
+  let busy=false,disabled=[];
+  function setBusy(value,grading=false){
+    busy=value;
+    if(value){disabled=[...view.querySelectorAll('button'),document.getElementById('nav-home'),document.getElementById('nav-settings')].map(element=>[element,element.disabled]);disabled.forEach(([element])=>element.disabled=true);}
+    else{disabled.forEach(([element,wasDisabled])=>element.disabled=wasDisabled);disabled=[];}
+    cancel.hidden=!(value&&grading);cancel.disabled=false;
+    grade.textContent=value&&grading?'AI 正在批改…':'AI 批改';
+  }
+  async function loadConnection(){
+    try{const config=await window.study.getAISettings();if(connection.isConnected)connection.textContent='当前连接：'+aiConnectionLabel(config)+'（可在设置中修改）';}
+    catch(e){if(connection.isConnected)connection.textContent=friendlyError(e);}
+  }
+  loadConnection();
+  grade.onclick=async()=>{
+    if(busy)return;
+    result.hidden=false;report.replaceChildren();status.textContent='正在提交课程原题与作答，等待 AI 批改…';
+    setBusy(true,true);loadConnection();
+    try{
+      const output=await window.study.programmingGrade(submission.submissionId);
+      renderGradingReport(report,output.report);
+      status.textContent='批改结果已保存。AI 评分仅供参考，请核对。';
+    }catch(e){status.textContent='批改未完成：'+friendlyError(e);}
+    finally{setBusy(false);}
+  };
+  cancel.onclick=async()=>{cancel.disabled=true;status.textContent='正在停止等待…';try{await window.study.cancelCodex();}catch(e){status.textContent=friendlyError(e);cancel.disabled=false;}};
+  pack.onclick=async()=>{
+    if(busy)return;
+    setBusy(true);
+    try{
+      const output=await window.study.programmingExport(submission.submissionId);if(!output)return;
+      packStatus.replaceChildren(document.createTextNode('已打包：'+output.file+' '));
+      const open=document.createElement('button');open.className='link-button';open.textContent='打开所在文件夹 →';
+      open.onclick=()=>window.study.openFolder(output.folder).catch(errorMessage);packStatus.append(open);
+    }catch(e){errorMessage(e);}
+    finally{setBusy(false);}
+  };
+  document.getElementById('programming-open-submission').onclick=()=>window.study.openFolder(submission.folder).catch(errorMessage);
+  document.getElementById('programming-leave').onclick=async()=>{try{await window.study.programmingLeave(id);renderLesson(id);}catch(e){errorMessage(e);}};
+  document.getElementById('programming-done').onclick=()=>renderProgrammingWorkspace(id);
 }
 window.study.onProgrammingSubmission(({id,preview})=>renderProgrammingSubmission(id,preview));
+window.study.onProgrammingGradeProgress(({submissionId,text})=>{
+  const report=document.getElementById('programming-grade-report');
+  if(report?.dataset.submission===submissionId)renderGradingReport(report,text);
+});

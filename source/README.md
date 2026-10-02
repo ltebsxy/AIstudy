@@ -86,7 +86,15 @@ PDF.js 6.3.289 及其 Worker、字体、CMap、WASM/ICC 资源均随安装包提
 
 Harness 存在诸多问题，建议不使用，目前暂不维护。设置中保留现有配置，并显示此提示。
 
-“设置”首页只展示 AI 设置和默认写字程序入口。API/独立 Harness 配置集中在 AI 设置，`api.systemPrompt` 可编辑并恢复默认；缺少此字段的旧配置使用内置提示。每次请求只有一条开头 system 消息，不写入历史，不改变 Harness。默认写字程序保存在 preferences，保存时合并已有字段；选择程序不启动它，做题时才使用。
+设置提供 AI 设置、外观、默认写字程序和练习工作区栏目，栏目切换保留顶部导航。API/独立 Harness 配置集中在 AI 设置，`api.systemPrompt` 可编辑并恢复默认；缺少此字段的旧配置使用内置提示。每次请求只有一条开头 system 消息，不写入历史，不改变 Harness。默认写字程序保存在 preferences，保存时合并已有字段；选择程序不启动它，做题时才使用。
+
+外观支持 `light`、`dark` 与 `system`，保存在 preferences 的 `theme` 字段。主进程通过 Electron nativeTheme 处理系统外观更新并同步各窗口；预加载在首帧前提供主题状态，同源内嵌聊天继承父窗口主题。夜间画布仅调整 PDF／文本及深色笔迹的绘制颜色，不修改原件、笔迹或阅读位置。`node tests/theme-smoke.js` 使用隔离数据验证切换、内嵌聊天同步与重启保存，也支持 `STUDY_TEST_EXE` 检查安装包内的程序。
+
+课程与读写导入目录分别保存在 preferences 的 `importDirectories` 中，仅成功选择／导入后更新；源码版默认 `output/courses/`，安装版默认系统下载目录，失效记录回退默认目录。
+
+## 英语阅读词库
+
+英语阅读使用 `lib/vendor/ecdict/dictionary.json.gz`，首次查询才加载；原词库来源、固定提交、SHA256 和筛选统计记录在同目录 `SOURCE.json`，MIT 许可在 `LICENSE`。转换脚本为 `scripts/build-english-dictionary.js`，从来源提交对应的 `ecdict.csv` 生成压缩词库，构建安装包时直接使用已入库的压缩文件，不下载完整词库或调用用户 API。文字型 PDF、TXT 和 Markdown 支持点词，扫描件与图片不进行 OCR。
 
 ## 加载性能
 

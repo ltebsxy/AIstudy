@@ -75,4 +75,6 @@ body.motion-ready .main{transition:padding-top .22s ease}
 .programming-submission details{border:1px solid #e1e9e4;border-radius:9px;margin:12px 0;padding:10px}
 .programming-submission summary{cursor:pointer;font-weight:700}
 .programming-submission pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:60vh;overflow:auto;font:12px/1.5 ui-monospace,Consolas,monospace;background:#f6f8f6;padding:12px;border-radius:7px}
+.programming-grade-report{white-space:pre-wrap;overflow-wrap:anywhere;font-size:14px;line-height:1.85;margin-top:14px;max-height:460px;overflow:auto}
+#programming-grade-status,#programming-package-status{font-size:12px;line-height:1.7;color:#64796e;overflow-wrap:anywhere}
 @media(max-width:700px){.programming-layout{grid-template-columns:1fr}.programming-files{max-height:150px;overflow:auto}.programming-page .main{padding:18px}}

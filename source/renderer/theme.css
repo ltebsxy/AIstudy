@@ -1,0 +1,67 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+:root{color-scheme:light;--canvas-bg:#ffffff;--canvas-page:#fafafa;--canvas-border:#e0e3e5;--canvas-ink:#253445}
+:root[data-theme=dark]{color-scheme:dark;--page:#181b1a;--surface:#222725;--raised:#2a302d;--hover:#313834;--selected:#3a423e;--text:#e2e7e4;--muted:#a0afa7;--border:#3b453f;--accent:#a3d8bf;--accent-bg:#293e34;--primary:#a3d8bf;--primary-text:#172c22;--error:#f0afa5;--error-bg:#422e2b;--canvas-bg:#1b1f1d;--canvas-page:#202420;--canvas-border:#39443c;--canvas-ink:#e2e7e4;background:var(--page);color:var(--text);scrollbar-color:#536057 var(--page)}
+html[data-theme=dark] body{color:var(--text);background:var(--page)}
+html[data-theme=dark] :is(.sidebar,.course-card,.editor-card,.lesson-card,.submission-card,.folder-card,.empty,.library-table-wrap,.library-dialog,.lesson-ai,.popover,#pdf-password,#word-popup,#writer-ai-panel,#panel){background:var(--surface);color:var(--text);border-color:var(--border);box-shadow:0 4px 18px #0002}
+html[data-theme=dark] :is(.field input,.field textarea,.field select,.settings-section select,.library-dialog input,.library-dialog select,.course-kind select,.programming-page select,.programming-page textarea,.programming-page input,#programming-entry,.question-type,.blank-answer,#question-response input[type=text],#question-select,#reading-mode,#pdf-password input,.ai-mode-select,.lesson-ai select,.lesson-ai textarea,.chat-compose textarea,.thread-row select,#grading-thread,.actions select,textarea){background:var(--page);color:var(--text);border-color:var(--border)}
+html[data-theme=dark] :is(button,.btn-plain,.footer-button,.refresh,.compact-button,.sidebar-toggle,.lesson-selection-action,.corner-left button,.corner-right){color:var(--text);border-color:var(--border)}
+html[data-theme=dark] :is(.btn-plain,.footer-button,.refresh,.compact-button,.sidebar-toggle,.lesson-selection-action,.corner-left button,.corner-right,.writer-actions button:not(#toggle-ai)){background:var(--surface);color:var(--text)}
+html[data-theme=dark] :is(.btn-plain,.footer-button,.refresh,.compact-button,.sidebar-toggle,.lesson-selection-action,.corner-left button,.corner-right,.writer-actions button:not(#toggle-ai)):hover{background:var(--hover)}
+html[data-theme=dark] :is(.btn-primary,.footer-button.finish,.chat-compose button,.submit-button,#ask){background:var(--primary);color:var(--primary-text);border-color:var(--primary);box-shadow:none}
+html[data-theme=dark] :is(.btn-primary,.footer-button.finish,.chat-compose button,.submit-button,#ask):hover{background:#b5e2cd}
+html[data-theme=dark] :is(.btn-soft,.target-tab.selected,.fragment-chip,.context-chip,.desktop-continue,.step-num,.success,.side-note,.grading-result,.response-option:has(input:checked),.grading-options label:has(input:checked)){background:var(--accent-bg);color:var(--accent);border-color:var(--border)}
+html[data-theme=dark] :is(.btn-danger,.message.error,.math-error){background:var(--error-bg);color:var(--error);border-color:#83594e}
+html[data-theme=dark] :is(.dialog-error,.danger,#response-status){color:var(--error)}
+html[data-theme=dark] :is(.hero,.hero-badge,.question-editor,.target-detail,.math-preview,.math-block,.programming-file-list,.programming-submission pre,#proposal pre,.response-option,.grading-options label,#grading-report th){background:var(--raised);color:var(--text);border-color:var(--border)}
+html[data-theme=dark] .hero:after{border-color:var(--border);box-shadow:none}
+html[data-theme=dark] :is(.programming-files,.programming-editor){background:var(--surface);border-color:var(--border)}
+html[data-theme=dark] #programming-content{background:var(--page)!important;color:var(--text)!important}
+html[data-theme=dark] :is(.nav-item,.library-modes button,.library-layout button,.programming-files button,.target-tab,.settings-tabs button,.reader-paging .btn){color:var(--muted)}
+html[data-theme=dark] :is(.nav-item:hover,.library-modes button:hover,.library-layout button:hover,.programming-files button:hover,.library-table tbody tr:hover,.settings-tabs button:hover,.reader-paging .btn:hover:not(:disabled)){background:var(--hover);color:var(--text)}
+html[data-theme=dark] :is(.nav-item.active,.nav-item.active:hover,.library-modes .selected,.library-modes .selected:hover,.library-layout button[aria-pressed=true],.library-layout button[aria-pressed=true]:hover,.library-table tbody tr.selected,.programming-files button.selected){background:var(--selected);color:var(--text);box-shadow:none}
+html[data-theme=dark] :is(.library-modes,.library-layout,.reader-paging .btn){background:var(--raised);border-color:var(--border)}
+html[data-theme=dark] .reader-paging .btn:disabled{background:var(--surface);color:var(--muted);border-color:var(--border);opacity:.45}
+html[data-theme=dark] :is(.library-table th,.library-table td,.section-reader .lesson-meta){border-color:var(--border);color:var(--text)}
+html[data-theme=dark] :is(.library-table th,.section-reader .lesson-meta){background:var(--surface)}
+html[data-theme=dark] :is(.settings-tabs,.workspace-setting-row,.card-footer,.lesson-meta,.footer,.programming-editor-head,.programming-submission details,#grading-report td,#grading-report th,#proposal details,footer){border-color:var(--border)}
+html[data-theme=dark] :is(.settings-tabs button.selected,.link-button,.folder-open,.library-table td:first-child button,.library-cards .open,.library-cards .read-document,.reader-heading,.reader-controls select,.library-path strong,.step-num,.side-note .number,.success strong,#settings-status,.typed-answer-preview,.word-pos,#grading-report h4,.math-preview-toggle summary){color:var(--accent)}
+html[data-theme=dark] .settings-tabs button.selected{border-bottom-color:var(--accent)}
+html[data-theme=dark] .settings-tabs button:not(.selected){border-bottom-color:transparent}
+html[data-theme=dark] :is(.subtitle,.eyebrow,.brand span,.hero p,.course-card p,.card-footer span,.section-heading span,.empty,.back,.field .hint,.filename,.side-note p,.step p,.success p,.course-imports span,.target-help,.math-help,.reader-controls label,.reader-progress,.folder-open span,.folder-actions button,.library-path,.library-storage,.loading-state,.workspace-setting-row small,.api-template-row span,.chat-empty,.drag-hint,.course-title,.question-count,.dots,.chat-subtitle,.capture-note,.response-blanks label,#grading-status,#programming-grade-status,#programming-package-status,#programming-status,#lesson-ai-status,#answer-summary,.popover output,.popover p,.corner-left span,#word-phonetic,#word-lemma,#word-status,#word-close,#word-popup footer,header span,.actions,#status){color:var(--muted)}
+html[data-theme=dark] :is(.lesson-content,.reader-body,.empty h3,.question-text){color:var(--text)}
+html[data-theme=dark] :is(.message.assistant,.lesson-ai-message.assistant,article.assistant){background:var(--raised);color:var(--text)}
+html[data-theme=dark] :is(.message.user,.lesson-ai-message.user,article.user){background:var(--accent-bg);color:var(--text)}
+html[data-theme=dark] .harness-notice{background:#3a3325;color:#e0c595;border-left-color:#c5a368}
+html[data-theme=dark] :is(.reader-controls select,.target-tab,.nav-button,.math-help code){background:var(--raised);border-color:var(--border)}
+html[data-theme=dark] .sidebar-bottom{background:none;border:0}
+html[data-theme=dark] .brand-mark{background:none}
+html[data-theme=dark] :is(.card-icon,.list-file-icon){background:var(--raised);color:#dcc79e}
+html[data-theme=dark] :is(.divider,.separator){background:var(--border)}
+html[data-theme=dark] :is(.dragbar,#panel>header){background:var(--surface);border-color:var(--border)}
+html[data-theme=dark]:has(#content) body{background:var(--surface);border-color:var(--border)}
+html[data-theme=dark]:has(#ball) body,html[data-theme=dark] body.external-exercise{background:transparent}
+html[data-theme=dark] body.external-exercise:not(.collapsed){background:var(--surface);border-color:var(--border)}
+html[data-theme=dark]:has(#ball),html[data-theme=dark]:has(#exercise-ball){background:transparent}
+html[data-theme=dark] :is(#ball,#exercise-ball){background:var(--accent-bg);color:var(--accent);border-color:#668775}
+html[data-theme=dark] header #submit{background:var(--raised);color:var(--accent);border-color:var(--border)}
+html[data-theme=dark] :is(.toolbar[aria-label="写字工具"],.popover){background:#222725f5;border-color:var(--border);color:var(--text)}
+html[data-theme=dark] :is(.toolbar[aria-label="写字工具"] button,.popover button){background:var(--surface);color:var(--text);border-color:var(--border)}
+html[data-theme=dark] :is(.toolbar[aria-label="写字工具"] button,.popover button):hover{background:var(--hover)}
+html[data-theme=dark] .toolbar[aria-label="写字工具"] .selected{background:var(--selected)!important;border-color:#6f8c7a!important}
+html[data-theme=dark] #pen{--ink:var(--canvas-ink)!important}
+html[data-theme=dark] .knob{fill:var(--surface)}
+html[data-theme=dark] #paper-area{background:var(--canvas-bg)}
+html[data-theme=dark] #save-status{background:#222725da;color:var(--muted)}
+html[data-theme=dark] #toggle-ai[aria-pressed=true]{background:var(--accent-bg);color:var(--accent);box-shadow:inset 0 0 0 1px #668775}
+html[data-theme=dark] #canvas-question{background:#9cc7b009;color:var(--text);border-color:var(--border)}
+html[data-theme=dark] #canvas-question header{color:var(--muted)}
+html[data-theme=dark] #question-response label{background:#222725f0}
+html[data-theme=dark] input[type=range],html[data-theme=dark] input[type=checkbox],html[data-theme=dark] input[type=radio]{accent-color:var(--accent)}
+html[data-theme=dark] :is(input,textarea,select,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+html[data-theme=dark] :is(input,textarea)::placeholder{color:#899a90;opacity:1}
+html[data-theme=dark] .toast{background:var(--raised);color:var(--text);border:1px solid var(--border)}
+.appearance-options{display:flex;gap:12px;flex-wrap:wrap}
+.appearance-options label{display:flex;align-items:center;gap:8px;padding:12px 16px;border:1px solid #dce5df;border-radius:9px;font-size:14px;cursor:pointer}
+.appearance-options label:has(input:checked){background:#e6e6e6;border-color:#bfc9c3}
+html[data-theme=dark] .appearance-options label{border-color:var(--border)}
+html[data-theme=dark] .appearance-options label:has(input:checked){background:var(--selected);color:var(--text)}

@@ -26,7 +26,7 @@ $('ball').onpointerdown=e=>{ballDown={x:e.screenX,y:e.screenY};ballMoved=false;$
 $('ball').onpointermove=e=>{if(!ballDown)return;const dx=e.screenX-ballDown.x,dy=e.screenY-ballDown.y;if(Math.abs(dx)+Math.abs(dy)>3)ballMoved=true;if(ballMoved&&(dx||dy)){window.study.programmingChatMove({dx,dy}).catch(()=>{});ballDown={x:e.screenX,y:e.screenY};}};
 $('ball').onpointerup=e=>{if(!ballMoved)setExpanded(true);ballDown=null;};
 $('collapse').onclick=()=>setExpanded(false);$('load-more').onclick=()=>loadHistory(true).catch(e=>status(e.message));
-$('submit').onclick=async()=>{if(!active||busy)return;const button=$('submit');button.disabled=true;try{await window.study.programmingShowSubmission(active.courseId);}catch(e){status(e.message);button.disabled=false;}};
+$('submit').onclick=async()=>{if(!active||busy)return;const button=$('submit');button.disabled=true;try{await window.study.programmingShowSubmission(active.courseId);}catch(e){status(e.message);}finally{button.disabled=false;}};
 $('ai-mode').onchange=async()=>{try{renderAIConfig(await window.study.switchAIMode($('ai-mode').value));await loadHistory();}catch(e){status(e.message);if(aiConfig)$('ai-mode').value=aiConfig.mode;}};
 $('compact').onclick=async()=>{if(!active||busy)return;try{status('正在压缩…');const result=await window.study.compactContext({scope:'programming',courseId:active.courseId});status(result.message);}catch(e){status(e.message);}};
 $('clear-context').onclick=async()=>{if(!active||busy)return;try{const result=await window.study.clearContext({scope:'programming',courseId:active.courseId});status(result.message);}catch(e){status(e.message);}};

@@ -26,9 +26,9 @@
     }
     const result={length:raw.length,samples,left,right,bounds:{minX,maxX,minY,maxY}};cache.set(stroke,result);return result;
   }
-  function paint(ctx,stroke,g=geometry(stroke)){
+  function paint(ctx,stroke,g=geometry(stroke),color=stroke.color){
     if(!g.samples.length)return;
-    ctx.fillStyle=ctx.strokeStyle=stroke.color;ctx.globalCompositeOperation=stroke.tool==='eraser'?'destination-out':'source-over';
+    ctx.fillStyle=ctx.strokeStyle=color;ctx.globalCompositeOperation=stroke.tool==='eraser'?'destination-out':'source-over';
     ctx.globalAlpha=stroke.tool==='highlighter'?.3:1;
     if(stroke.tool!=='pen'){
       ctx.lineCap=ctx.lineJoin='round';ctx.lineWidth=stroke.width;ctx.beginPath();g.samples.forEach((p,i)=>i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y));

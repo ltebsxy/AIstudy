@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="writer.css">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="math.css">
+  <link rel="stylesheet" href="theme.css">
+  <script src="theme.js"></script>
 </head>
 <body>
   <svg class="svg-definitions" aria-hidden="true"><defs>
@@ -34,10 +36,11 @@
   </div>
   <button id="view-settings-toggle" class="icon-button corner-right" aria-label="画布设置" title="画布设置" popovertarget="view-settings"><svg><use href="#i-settings"/></svg></button>
   <div id="tool-settings" class="popover tool-popover" popover><h3>书写工具</h3><label>画笔颜色 <input id="color" type="color" value="#253445"></label><label>画笔粗细 <input id="width" type="range" min="1" max="18" value="3"></label><label>橡皮大小 <input id="eraser-width" type="range" min="8" max="80" value="24"></label><button id="clear" class="danger">清空当前画布笔迹</button></div>
-  <div id="view-settings" class="popover view-popover" popover><h3>画布设置</h3><div id="file-settings"><label for="file-width">文件宽度 <output id="file-width-value"></output></label><input id="file-width" type="range" min="200" max="1600" step="20" value="720"><label for="file-left">左侧留白 <output id="file-left-value"></output></label><input id="file-left" type="range" min="0" max="800" step="8" value="48"><label for="file-gap">文件页间距 <output id="file-gap-value"></output></label><input id="file-gap" type="range" min="0" max="200" step="4" value="24"><button id="reset-file">恢复文件显示</button></div><button id="return-origin">回到起点</button><p>滚轮上下移动；选择手形工具可拖动。书写到画布底部时向下延伸；滚动和拖动不会增加空白。</p></div>
+  <div id="view-settings" class="popover view-popover" popover><h3>画布设置</h3><div id="file-settings"><label for="reading-mode">阅读模式</label><select id="reading-mode"><option value="standard">普通读写</option><option value="english">英语阅读模式</option></select><p id="english-help" hidden>手形工具下，鼠标左键点词查看离线词性与释义，拖动可移动画布。切换画笔可批注。支持文字型 PDF、TXT 和 Markdown；扫描件与图片暂不支持点词。</p><label for="file-width">文件宽度 <output id="file-width-value"></output></label><input id="file-width" type="range" min="200" max="1600" step="20" value="720"><label for="file-left">左侧留白 <output id="file-left-value"></output></label><input id="file-left" type="range" min="0" max="800" step="8" value="48"><label for="file-gap">文件页间距 <output id="file-gap-value"></output></label><input id="file-gap" type="range" min="0" max="200" step="4" value="24"><button id="reset-file">恢复文件显示</button></div><button id="return-origin">回到起点</button><p>滚轮上下移动；选择手形工具可拖动。书写到画布底部时向下延伸；滚动和拖动不会增加空白。</p></div>
   <div id="save-status" role="status">正在载入…</div><div class="writer-actions"><button id="previous-question" class="submit-button">上一题</button><button id="next-question" class="submit-button">下一题</button><button id="capture-answer" class="submit-button">截图答案</button><button id="toggle-ai" class="submit-button" aria-pressed="false" title="打开 AI 问答">AI 问答</button></div>
   <aside id="writer-ai-panel" hidden aria-label="AI 问答浮窗"><iframe id="writer-ai-frame" src="overlay.html?embedded=1" title="AI 问答"></iframe></aside>
+  <aside id="word-popup" hidden role="dialog" aria-label="单词释义"><header><strong id="word-title"></strong><button id="word-close" aria-label="关闭单词释义">×</button></header><div id="word-phonetic"></div><div id="word-lemma"></div><div id="word-status" role="status"></div><ul id="word-definitions"></ul><footer>离线词典 · ECDICT</footer></aside>
   <dialog id="pdf-password"><form><h3>请输入 PDF 密码</h3><input type="password" required autocomplete="off" aria-label="PDF 密码"><div><button type="button" data-cancel>取消</button><button type="submit">打开</button></div></form></dialog>
-  <script type="module" src="reader.js"></script>
+  <script src="reader-words.js"></script><script type="module" src="reader.js"></script><script src="english-reader.js"></script>
   <script src="vendor/katex/katex.min.js"></script><script src="math.js"></script><script src="writer-question.js"></script><script src="board-model.js"></script><script src="ink.js"></script><script src="writer.js"></script>
 </body></html>

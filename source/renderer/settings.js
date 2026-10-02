@@ -4,8 +4,8 @@ function aiConnectionLabel(config) {
 function leaveSettings(options={}) { if(options.exercise)window.study.resumeSession().catch(errorMessage);else renderHome(); }
 function renderSettings(options={}) { return renderAISettings(options); }
 let settingsRequest=0;
-function settingsTabs(active){return `<nav class="settings-tabs" aria-label="设置栏目"><button class="${active==='ai'?'selected':''}" data-settings-tab="ai" ${active==='ai'?'aria-current="page"':''}>AI 设置</button><button class="${active==='writing'?'selected':''}" data-settings-tab="writing" ${active==='writing'?'aria-current="page"':''}>默认写字程序</button><button class="${active==='workspaces'?'selected':''}" data-settings-tab="workspaces" ${active==='workspaces'?'aria-current="page"':''}>练习工作区</button></nav>`;}
-function bindSettingsTabs(options){view.querySelectorAll('[data-settings-tab]').forEach(button=>button.onclick=()=>({ai:renderAISettings,writing:renderWritingSettings,workspaces:renderWorkspaceSettings})[button.dataset.settingsTab](options));}
+function settingsTabs(active){return `<nav class="settings-tabs" aria-label="设置栏目"><button class="${active==='ai'?'selected':''}" data-settings-tab="ai" ${active==='ai'?'aria-current="page"':''}>AI 设置</button><button class="${active==='appearance'?'selected':''}" data-settings-tab="appearance" ${active==='appearance'?'aria-current="page"':''}>外观</button><button class="${active==='writing'?'selected':''}" data-settings-tab="writing" ${active==='writing'?'aria-current="page"':''}>默认写字程序</button><button class="${active==='workspaces'?'selected':''}" data-settings-tab="workspaces" ${active==='workspaces'?'aria-current="page"':''}>练习工作区</button></nav>`;}
+function bindSettingsTabs(options){view.querySelectorAll('[data-settings-tab]').forEach(button=>button.onclick=()=>({ai:renderAISettings,appearance:renderAppearanceSettings,writing:renderWritingSettings,workspaces:renderWorkspaceSettings})[button.dataset.settingsTab](options));}
 function mountSettingsPage(markup){
   const draft=document.createElement('div');draft.innerHTML=markup;
   const next=draft.firstElementChild,tabs=next.querySelector('.settings-tabs'),body=document.createElement('div');body.className='settings-body';
@@ -18,6 +18,20 @@ function mountSettingsPage(markup){
   const selected=tabs.querySelector('[aria-current="page"]')?.dataset.settingsTab;
   current.querySelectorAll('[data-settings-tab]').forEach(button=>{const active=button.dataset.settingsTab===selected;button.classList.toggle('selected',active);if(active)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');});
   current.querySelector(':scope > .settings-body').replaceWith(body);
+}
+async function renderAppearanceSettings(options={}){
+  nav('settings');const request=++settingsRequest;
+  let theme;try{theme=await window.study.getTheme();}catch(e){errorMessage(e);return;}
+  if(request!==settingsRequest||!document.getElementById('nav-settings').classList.contains('active'))return;
+  mountSettingsPage(`<div class="content settings-page"><button class="back" id="appearance-back">← ${options.exercise?'返回做题':'返回课程'}</button>${settingsTabs('appearance')}<h1 class="page-title">外观</h1><p class="subtitle">选择适合当前光线的主题，切换后自动保存。</p><section class="editor-card settings-section"><h2>主题</h2><div class="appearance-options" role="group" aria-label="主题">${[['light','浅色'],['dark','夜间模式'],['system','跟随系统']].map(([value,label])=>`<label><input type="radio" name="appearance" value="${value}" ${theme.mode===value?'checked':''}>${label}</label>`).join('')}</div><p class="target-help">主界面、画布和 AI 问答同步切换。文件原件和已保存的笔迹颜色不变。</p><p id="appearance-status" role="status"></p></section></div>`);
+  bindSettingsTabs(options);document.getElementById('appearance-back').onclick=()=>leaveSettings(options);
+  const inputs=[...view.querySelectorAll('[name="appearance"]')],status=document.getElementById('appearance-status');
+  for(const input of inputs)input.onchange=async()=>{
+    if(!input.checked)return;inputs.forEach(item=>item.disabled=true);
+    try{theme=await window.study.saveTheme(input.value);status.textContent='已保存。';}
+    catch(e){inputs.forEach(item=>item.checked=item.value===theme.mode);status.textContent=friendlyError(e);}
+    finally{inputs.forEach(item=>item.disabled=false);}
+  };
 }
 async function renderWorkspaceSettings(options={}){
   nav('settings');
