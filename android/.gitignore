@@ -1,0 +1,7 @@
+/build/
+/.gradle/
+/.tools/
+/local.properties
+/app/build/
+/app/src/main/assets/vendor/
+/app/src/main/res/drawable/icon.png

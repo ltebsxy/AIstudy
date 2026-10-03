@@ -17,14 +17,17 @@ class AISettings {
   }
   public(config=this.read()) {
     const {encryptedKey,...api}=config.api;const {encryptedToken,...harness}=config.harness;
-    return {...config,api:{systemPrompt:API_SYSTEM_PROMPT,...api,hasKey:Boolean(encryptedKey)},defaultSystemPrompt:API_SYSTEM_PROMPT,harness:{...harness,hasToken:Boolean(encryptedToken)}};
+    return {...config,chatgpt:{accountId:'',model:'',systemPrompt:API_SYSTEM_PROMPT,...config.chatgpt},api:{systemPrompt:API_SYSTEM_PROMPT,...api,hasKey:Boolean(encryptedKey)},defaultSystemPrompt:API_SYSTEM_PROMPT,harness:{...harness,hasToken:Boolean(encryptedToken)}};
   }
   save(input) {
     const old=this.read();
-    if(!['api','harness'].includes(input.mode))throw new Error('请选择 API 或 Harness。');
-    const a=input.api||{},h=input.harness||{};
+    if(!['api','harness','chatgpt'].includes(input.mode))throw new Error('请选择 API、ChatGPT 订阅或 Harness。');
+    const a=input.api||{},h=input.harness||{},c=input.chatgpt||old.chatgpt||{};
     if(!['deepseek','openai','custom'].includes(a.provider)||!['codex','http'].includes(h.kind))throw new Error('连接类型无效。');
     if(a.systemPrompt!=null&&(typeof a.systemPrompt!=='string'||a.systemPrompt.length>20000))throw new Error('系统提示词请控制在 20000 字以内。');
+    if(c.systemPrompt!=null&&(typeof c.systemPrompt!=='string'||c.systemPrompt.length>20000))throw new Error('系统提示词请控制在 20000 字以内。');
+    const chatgpt={accountId:String(c.accountId||'').slice(0,100),model:String(c.model||'').trim().slice(0,160),modelName:String(c.modelName||'').slice(0,200),accountLabel:String(c.accountLabel||'').slice(0,400),systemPrompt:c.systemPrompt??API_SYSTEM_PROMPT};
+    if(chatgpt.accountId&&!/^[0-9a-f-]{36}$/i.test(chatgpt.accountId))throw new Error('ChatGPT 账号 ID 无效。');
     const api={systemPrompt:a.systemPrompt??old.api.systemPrompt??API_SYSTEM_PROMPT,provider:a.provider,baseUrl:endpoint(a.baseUrl),model:String(a.model||'').trim().slice(0,160)};
     const harness={kind:h.kind,name:String(h.name||'').trim().slice(0,80),threadId:String(h.threadId||'').trim(),endpoint:endpoint(h.endpoint,true),sessionId:String(h.sessionId||'study').trim().slice(0,160)};
     if(harness.threadId&&!/^[0-9a-f-]{20,}$/i.test(harness.threadId))throw new Error('Codex 任务 ID 无效。');
@@ -35,21 +38,23 @@ class AISettings {
     };
     api.encryptedKey=secret(a.apiKey,a.clearKey,old.api.encryptedKey,api.baseUrl===old.api.baseUrl);
     harness.encryptedToken=secret(h.token,h.clearToken,old.harness.encryptedToken,harness.endpoint===old.harness.endpoint);
-    const config={mode:input.mode,api,harness};
+    const config={mode:input.mode,api,harness,chatgpt};
     fs.mkdirSync(this.root,{recursive:true});const file=path.join(this.root,'ai-settings.json');
     fs.writeFileSync(file+'.tmp',JSON.stringify(config,null,2));fs.renameSync(file+'.tmp',file);
     return this.public(config);
   }
   secret(config) {
+    if(config.mode==='chatgpt')return '';
     const encrypted=config.mode==='api'?config.api.encryptedKey:config.harness.encryptedToken;
     if(!encrypted)return '';
     try{return this.safe.decryptString(Buffer.from(encrypted,'base64'));}catch{throw new Error('无法解密密钥，请在设置中重新填写。');}
   }
   switchMode(mode) {
-    if(!['api','harness'].includes(mode))throw new Error('请选择 API 或 Harness。');
+    if(!['api','harness','chatgpt'].includes(mode))throw new Error('请选择 API、ChatGPT 订阅或 Harness。');
     return this.save({...this.public(),mode});
   }
   identity(config=this.read()) {
+    if(config.mode==='chatgpt')return ['chatgpt',config.chatgpt?.accountId||'',config.chatgpt?.model||''];
     return config.mode==='api'?['api',config.api.baseUrl,config.api.model]:['harness',config.harness.kind,config.harness.kind==='codex'?config.harness.threadId:config.harness.endpoint,config.harness.kind==='http'?config.harness.sessionId:''];
   }
   key(scope,courseId,config=this.read()) { return crypto.createHash('sha256').update(JSON.stringify([scope,String(courseId),this.identity(config)])).digest('hex'); }

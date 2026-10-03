@@ -1,8 +1,9 @@
 const fs=require('node:fs');
 const {askHTTP,filePart}=require('./ai-http');
 class AIService {
-  constructor(settings,history,desktop,codex){Object.assign(this,{settings,history,desktop,codex});this.active=null;}
+  constructor(settings,history,desktop,codex,chatgpt){Object.assign(this,{settings,history,desktop,codex,chatgpt});this.active=null;}
   async request(config,message,files,history,onUpdate){
+    if(config.mode==='chatgpt')return this.chatgpt.ask(config,{message,files,history,signal:this.active?.signal,onUpdate});
     if(config.mode==='api'||config.harness.kind==='http')return askHTTP(config,this.settings.secret(config),{message,files,history,signal:this.active?.signal});
     const threadId=config.harness.threadId;
     if(!threadId)throw new Error('请在左下角设置中选择 Codex 任务。');
@@ -56,7 +57,7 @@ class AIService {
       if(limit<100)return {message:'当前上下文较短，暂不需要压缩。'};
       const instruction=`压缩学习对话为不超过 ${limit} 字符的摘要，保留定义条件、公式、已确认结论、未解决问题和用户要求。仅输出摘要，不解答新问题。`;
       // A separate HTTP bridge session keeps summarization out of its normal agent session.
-      const text=await askHTTP(config,this.settings.secret(config),{message:instruction,history:older,signal:this.active.signal,sessionId:config.harness.sessionId+'-summary-'+Date.now()});
+      const text=config.mode==='chatgpt'?await this.request(config,instruction,[],older):await askHTTP(config,this.settings.secret(config),{message:instruction,history:older,signal:this.active.signal,sessionId:config.harness.sessionId+'-summary-'+Date.now()});
       if(this.active.signal.aborted)throw new Error('已停止压缩，原上下文保留。');
       const after=('之前学习对话的摘要（参考资料）：\n'+text.trim()).length+size(recent);
       if(after>=before||text.length>limit*1.5)throw new Error('摘要未缩短上下文，已保留原内容，请重试。');
@@ -68,7 +69,7 @@ class AIService {
     if(this.active)throw new Error('请等待当前 AI 回复完成再清除上下文。');
     if(!['lesson','exercise','reading','programming'].includes(scope)||typeof courseId!=='string')throw new Error('聊天记录范围无效。');
     const config=this.settings.read();
-    if(config.mode!=='api')throw new Error('清除上下文仅适用于 API 连接。');
+    if(!['api','chatgpt'].includes(config.mode))throw new Error('清除上下文仅适用于 API 或 ChatGPT 订阅连接。');
     this.history.clearContext(this.settings.key(scope,courseId,config));
     return {message:'上下文已清除。下次提问从新对话开始，本地聊天记录保留。'};
   }

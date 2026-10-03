@@ -65,3 +65,14 @@ html[data-theme=dark] .toast{background:var(--raised);color:var(--text);border:1
 .appearance-options label:has(input:checked){background:#e6e6e6;border-color:#bfc9c3}
 html[data-theme=dark] .appearance-options label{border-color:var(--border)}
 html[data-theme=dark] .appearance-options label:has(input:checked){background:var(--selected);color:var(--text)}
+
+/* OAuth account controls share the app theme, and never contain credentials. */
+.chatgpt-signin{background:#111;color:#fff;border:1px solid #111;min-height:40px;padding:10px 18px;border-radius:8px;font-weight:600}
+.chatgpt-usage{display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:11px;color:var(--muted,#71847d)}
+.chatgpt-usage[hidden]{display:none}
+.chatgpt-usage button{font:inherit;color:inherit;border:0;background:transparent;cursor:pointer;text-decoration:underline;padding:2px}
+.ai-compose-actions:has(.chatgpt-usage),.ai-chat-tools:has(.chatgpt-usage),.actions:has(.chatgpt-usage){flex-wrap:wrap}
+.chatgpt-usage{flex-basis:100%}
+.chatgpt-welcome{max-width:440px;padding:28px;border:1px solid #dbe4df;border-radius:16px;background:#fff;color:#24342e}
+.chatgpt-welcome::backdrop{background:rgba(0,0,0,.35)}
+:root[data-theme="dark"] .chatgpt-welcome{background:#252b28;color:#e0e7e3;border-color:#414b45}

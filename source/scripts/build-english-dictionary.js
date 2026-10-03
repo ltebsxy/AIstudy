@@ -20,19 +20,27 @@ function* rows(text){
 }
 function build(csv,license,destination){
   const source=fs.readFileSync(csv),iterator=rows(source.toString('utf8')),header=iterator.next().value;
-  const columns=Object.fromEntries(header.map((name,i)=>[name,i])),entries=Object.create(null),exchanges=Object.create(null);
-  const key=word=>word.trim().toLowerCase().replaceAll('’',"'");
+  const columns=Object.fromEntries(header.map((name,i)=>[name,i])),entries=Object.create(null),extended=Object.create(null),phrases=Object.create(null),exchanges=Object.create(null),phraseRows=[];
+  const key=word=>word.trim().toLowerCase().replaceAll('’',"'").replace(/\s+/g,' ');
   const valid=word=>/^[a-z]+(?:['-][a-z]+)*$/.test(word)&&word.length<=64;
   const required=new Set(["can't","don't","isn't","it's","i'm","i've","i'll","you're","they're","we're","doesn't","didn't","won't"]);
   for(const row of iterator){
     const get=name=>row[columns[name]]||'',word=key(get('word'));
-    if(!valid(word)||!get('translation'))continue;
+    if(!get('translation'))continue;
     const bnc=Number(get('bnc')),frq=Number(get('frq'));
-    if(!(bnc>0&&bnc<=30000||frq>0&&frq<=30000||get('tag')||get('oxford')==='1'||Number(get('collins'))>0||required.has(word)))continue;
-    if(!Object.hasOwn(entries,word)||get('word')===word){
-      entries[word]=[get('phonetic'),get('translation').replace(/\\n/g,'\n').replace(/\\r/g,''),get('pos')];
+    const common=bnc>0&&bnc<=60000||frq>0&&frq<=60000||get('tag')||get('oxford')==='1'||Number(get('collins'))>0||required.has(word);
+    const value=[get('phonetic'),get('translation').replace(/\\n/g,'\n').replace(/\\r/g,''),get('pos')];
+    if(/^[a-z]+(?:['-][a-z]+)*(?: [a-z]+(?:['-][a-z]+)*){1,7}$/.test(word)&&word.length<=160){phraseRows.push({word,value,common,definition:!!get('definition')});continue;}
+    if(!valid(word))continue;
+    const target=common?entries:get('definition')||/\[计\]/.test(get('translation'))?extended:null;
+    if(!target)continue;
+    if(!Object.hasOwn(target,word)||get('word')===word){
+      target[word]=value;
       exchanges[word]=get('exchange');
     }
+  }
+  for(const {word,value,common,definition} of phraseRows){
+    if(common||definition||word.split(' ').every(item=>Object.hasOwn(entries,item))&&!/\[(医|化|机|法|经|电|生|地质|建|冶|矿)\]/.test(value[1]))phrases[word]=value;
   }
   const forms=Object.create(null);
   for(const [word,exchange] of Object.entries(exchanges))for(const value of exchange.split('/')){
@@ -44,14 +52,16 @@ function build(csv,license,destination){
     }
   }
   const sorted=value=>Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b,'en')));
-  const data=Buffer.from(JSON.stringify({entries:sorted(entries),forms:sorted(forms)})),compressed=zlib.gzipSync(data,{level:9});
-  fs.mkdirSync(destination,{recursive:true});fs.writeFileSync(path.join(destination,'dictionary.json.gz'),compressed);
+  fs.mkdirSync(destination,{recursive:true});
+  function pack(name,value){const data=Buffer.from(JSON.stringify(value)),compressed=zlib.gzipSync(data,{level:9});fs.writeFileSync(path.join(destination,name),compressed);return {file:name,entries:Object.keys(value.entries).length,forms:Object.keys(value.forms||{}).length,uncompressedBytes:data.length,compressedBytes:compressed.length,SHA256:crypto.createHash('sha256').update(compressed).digest('hex')};}
+  const core=pack('dictionary.json.gz',{entries:sorted(entries),forms:sorted(forms)});
+  const extra=pack('extended.json.gz',{entries:sorted(extended)}),phrase=pack('phrases.json.gz',{entries:sorted(phrases)});
   fs.copyFileSync(license,path.join(destination,'LICENSE'));
-  const metadata={name:'ECDICT compact core',source:`https://github.com/skywind3000/ECDICT/tree/${REVISION}`,revision:REVISION,
+  const metadata={name:'ECDICT layered English-Chinese dictionary',source:`https://github.com/skywind3000/ECDICT/tree/${REVISION}`,revision:REVISION,
     sourceFile:'ecdict.csv',sourceSHA256:crypto.createHash('sha256').update(source).digest('hex'),
-    selection:'Single words with BNC/COCA rank <= 30000, exam tags, Oxford flag, Collins stars, and common contractions; inflections from exchange.',
-    entries:Object.keys(entries).length,forms:Object.keys(forms).length,uncompressedBytes:data.length,compressedBytes:compressed.length,
-    license:'MIT',dictionarySHA256:crypto.createHash('sha256').update(compressed).digest('hex')};
+    selection:'Core: BNC/COCA <= 60000, exam tags, Oxford, Collins and contractions. Extended: additional single words with English definitions or computer labels. Phrases: ranked/defined expressions or expressions of core words excluding specialist labels. Inflections from exchange.',
+    entries:core.entries,forms:core.forms,uncompressedBytes:core.uncompressedBytes,compressedBytes:core.compressedBytes,
+    license:'MIT',dictionarySHA256:core.SHA256,parts:[core,extra,phrase],totalEntries:core.entries+extra.entries+phrase.entries,totalCompressedBytes:core.compressedBytes+extra.compressedBytes+phrase.compressedBytes};
   fs.writeFileSync(path.join(destination,'SOURCE.json'),JSON.stringify(metadata,null,2)+'\n');
   return metadata;
 }

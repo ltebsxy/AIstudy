@@ -1,0 +1,15 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'local.studydesk.android'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'local.studydesk.android'
+        minSdk 28
+        targetSdk 35
+        versionCode 2002
+        versionName '0.2.2'
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+tasks.register('syncStudyAssets', Exec) { workingDir rootDir; commandLine 'node', 'scripts/sync-assets.mjs' }
+tasks.named('preBuild') { dependsOn 'syncStudyAssets' }

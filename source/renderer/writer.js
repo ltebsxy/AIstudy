@@ -1,6 +1,11 @@
 const $=id=>document.getElementById(id),canvas=$('paper'),ctx=canvas.getContext('2d'),background=$('document-layer'),bg=background.getContext('2d'),area=$('paper-area');
 let course=null,index=0,pages=[],legacy={},board=StudyBoard.normalize(),ready=false,busy=false,tool='pen',active=null,panning=null,redo=[],readerPages=0,cache=new Map(),pending=new Set(),renderQueue=Promise.resolve(),saveChain=Promise.resolve(),saveError=null,generation=0,origin=0,frame=0,saveTimer=0,restoring=false;
-let screenWidth=1,screenHeight=1,dpr=1,aiVisible=false,aiMotionState=null,aiAnimation=null,wordGesture=null;
+let screenWidth=1,screenHeight=1,dpr=1,aiVisible=false,aiMotionState=null,aiAnimation=null,wordGesture=null,textSelection=null;
+window.addEventListener('english-selection-clear',()=>{textSelection=null;invalidate();});
+window.addEventListener('english-selection',event=>{
+  if(event.detail.sessionId!==course?.sessionId)return;
+  textSelection={anchor:event.detail.page,items:event.detail.items};invalidate();
+});
 let canvasColors;
 function updateCanvasTheme(){
   const style=getComputedStyle(document.documentElement);
@@ -114,16 +119,36 @@ function drawStroke(c,s,v){
 function paint(){
   WriterQuestion.position(board.viewport);
   bg.setTransform(dpr,0,0,dpr,0,0);ctx.setTransform(dpr,0,0,dpr,0,0);drawDocument(bg,board.viewport,screenWidth,screenHeight);ctx.clearRect(0,0,screenWidth,screenHeight);
+  if(textSelection?.items.length){
+    const r=StudyBoard.rect(board.file,textSelection.anchor),scale=board.file.width/1000;
+    ctx.save();ctx.translate(r.x-board.viewport.x,r.y-board.viewport.y);ctx.scale(scale,scale);ctx.fillStyle=StudyTheme.dark?'rgba(124,199,167,.32)':'rgba(95,180,145,.25)';
+    for(const item of textSelection.items){ctx.save();ctx.translate(item.x,item.y);ctx.rotate(item.angle);ctx.fillRect(item.start,item.top,item.end-item.start,item.height);ctx.restore();}ctx.restore();
+  }
   for(const s of board.strokes)drawStroke(ctx,s,board.viewport);if(active)drawStroke(ctx,active,board.viewport);
 }
 function world(event){return {x:Math.max(0,Math.min(screenWidth,event.clientX))+board.viewport.x,y:Math.max(0,Math.min(screenHeight,event.clientY))+board.viewport.y,p:event.pointerType==='pen'?Math.max(.05,event.pressure||.5):.5};}
 function anchorAt(p){if(!reading())return undefined;const step=board.file.width*1.4+board.file.gap,i=Math.floor(p.y/step),r=StudyBoard.rect(board.file,i);return i>=0&&i<readerPages&&p.x>=r.x&&p.x<=r.x+r.width&&p.y<=r.y+r.height?i:undefined;}
 function appendPoint(event){const position=world(event);growForInk(position);const p=StudyBoard.localPoint(position,active.anchor,board.file),last=active.points.at(-1);if(Math.hypot(p.x-last.x,p.y-last.y)>.3)active.points.push(p);invalidate();}
+function selectedWords(gesture){
+  if(gesture.start<0)return null;
+  const end=StudyBoard.localPoint(gesture.end,gesture.anchor,gesture.file);
+  return ReaderWords.range(gesture.items,gesture.start,gesture.moved?ReaderWords.nearest(gesture.items,end.x,end.y):gesture.start);
+}
+function highlightWords(gesture){const hit=selectedWords(gesture);textSelection=hit?{anchor:gesture.anchor,items:hit.items}:null;invalidate();}
 canvas.onpointerdown=e=>{
-  if(!ready||busy||active||panning||!e.isPrimary||e.button>1)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);
+  if(!ready||busy||active||panning||wordGesture||!e.isPrimary||e.button>1)return;e.preventDefault();canvas.setPointerCapture(e.pointerId);
   if(englishReading()&&tool==='hand'&&e.pointerType==='mouse'&&e.button===0){
     const point=world(e),anchor=anchorAt(point);
-    if(anchor!=null)wordGesture={x:e.clientX,y:e.clientY,point,anchor,moved:false};
+    if(anchor!=null){
+      const gesture=wordGesture={x:e.clientX,y:e.clientY,point,end:point,anchor,moved:false,file:{...board.file},items:null,start:-1};
+      const local=StudyBoard.localPoint(point,anchor,gesture.file);
+      gesture.loaded=StudyReader.words(anchor).then(items=>{
+        gesture.items=items;gesture.start=ReaderWords.hitIndex(items,local.x,local.y);
+        if(wordGesture===gesture){if(gesture.start>=0){panning=null;document.body.classList.remove('dragging');highlightWords(gesture);}else if(gesture.moved&&panning)moveTo(panning.v.x+gesture.point.x-gesture.end.x,panning.v.y+gesture.point.y-gesture.end.y);}
+      });
+      // A failed text layer still permits panning; the popup reports the error on release.
+      gesture.loaded.catch(()=>{if(wordGesture===gesture)gesture.items=[];});
+    }
   }
   if(tool==='hand'||e.pointerType==='touch'||e.button===1){panning={x:e.clientX,y:e.clientY,v:{...board.viewport}};document.body.classList.add('dragging');return;}
   const point=world(e);growForInk(point);const anchor=anchorAt(point),scale=anchor==null?1:board.file.width/1000;
@@ -131,7 +156,12 @@ canvas.onpointerdown=e=>{
   invalidate();
 };
 canvas.onpointermove=e=>{
-  if(panning){if(wordGesture&&!wordGesture.moved){if(Math.hypot(e.clientX-wordGesture.x,e.clientY-wordGesture.y)<=5)return;wordGesture.moved=true;}moveTo(panning.v.x+panning.x-e.clientX,panning.v.y+panning.y-e.clientY);return;}if(!active)return;
+  if(wordGesture){
+    wordGesture.end=world(e);if(!wordGesture.moved){if(Math.hypot(e.clientX-wordGesture.x,e.clientY-wordGesture.y)<=5)return;wordGesture.moved=true;}
+    if(!wordGesture.items)return;
+    if(wordGesture.start>=0){highlightWords(wordGesture);return;}
+  }
+  if(panning){moveTo(panning.v.x+panning.x-e.clientX,panning.v.y+panning.y-e.clientY);return;}if(!active)return;
   const samples=e.getCoalescedEvents?.();for(const event of samples?.length?samples:[e])appendPoint(event);
 };
 function finishStroke(){
@@ -142,12 +172,12 @@ function finishStroke(){
 }
 canvas.onpointerup=e=>{
   const gesture=wordGesture;finishStroke();
-  if(gesture&&!gesture.moved&&e.button===0&&englishReading()){
-    const local=StudyBoard.localPoint(gesture.point,gesture.anchor,board.file);
-    EnglishReader.open({sessionId:course.sessionId,page:gesture.anchor,x:local.x,y:local.y,clientX:e.clientX,clientY:e.clientY});
+  if(gesture&&e.button===0&&englishReading()){
+    EnglishReader.open({sessionId:course.sessionId,page:gesture.anchor,hit:gesture.loaded.then(()=>selectedWords(gesture)),clientX:e.clientX,clientY:e.clientY});
   }
 };
-canvas.onpointercancel=canvas.onlostpointercapture=finishStroke;canvas.oncontextmenu=e=>e.preventDefault();
+canvas.onpointercancel=()=>{EnglishReader.close();finishStroke();};
+canvas.onlostpointercapture=()=>{if(wordGesture)EnglishReader.close();finishStroke();};canvas.oncontextmenu=e=>e.preventDefault();
 canvas.addEventListener('wheel',e=>{e.preventDefault();if(!ready||busy||active)return;const factor=e.deltaMode===1?20:e.deltaMode===2?screenHeight:1;moveTo(board.viewport.x+(e.shiftKey?e.deltaY:e.deltaX)*factor,board.viewport.y+(e.shiftKey?0:e.deltaY)*factor);},{passive:false});
 function selectTool(next,color){EnglishReader.close();finishStroke();tool=next;if(color)$('color').value=color;document.body.classList.toggle('hand',tool==='hand');
   for(const button of document.querySelectorAll('[data-pen],#hand,#eraser,#highlighter')){const selected=button.dataset.pen?next==='pen'&&button.dataset.pen===$('color').value:button.id===next;button.classList.toggle('selected',selected);button.setAttribute('aria-pressed',String(selected));}

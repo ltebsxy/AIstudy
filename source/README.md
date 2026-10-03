@@ -62,7 +62,7 @@ Codex 支持本机 App Server 与桌面随附工具连接；桌面自动转发�
 
 ### 发布排除
 
-`lib/library.js` 管理普通文件夹、内容归属及导入文件副本。索引 v2 的文件夹使用 `mode` 与 `parentId` 隔离两个目录；`views.study` / `views.reading` 各自保存位置和卡片／列表偏好。v1 首次读取时先备份再迁移，保留 PDF ID 与课程归属；禁止跨模式移动及目录循环。
+`lib/library.js` 管理普通文件夹、内容归属及导入文件副本。 `lib/reading-pack.js` 支持异步文件夹导入与 version 1 阅读包清单，见 [reading-pack-format.md](docs/reading-pack-format.md)。先验证内容再复制，全部成功后一次更新索引；失败回收副本。保留非空文件夹层级；英语模式只作为尚无阅读批注的文件的默认设置。索引 v2 的文件夹使用 `mode` 与 `parentId` 隔离两个目录；`views.study` / `views.reading` 各自保存位置和卡片／列表偏好。v1 首次读取时先备份再迁移，保留 PDF ID 与课程归属；禁止跨模式移动及目录循环。
 
 开发版和便携工程用 `../app/data/`；安装版用可执行文件旁的 `data/`。`STUDY_DATA_DIR` 指定时改用测试目录下的 `library/`，避免写入真实分区。构建请使用暂存输出，再复制 `win-unpacked/` 与安装包，保留用户的 `data/`。分区索引不含 API 凭据，原有课程与 AI 设置仍沿用用户数据目录。
 
@@ -94,7 +94,7 @@ Harness 存在诸多问题，建议不使用，目前暂不维护。设置中保
 
 ## 英语阅读词库
 
-英语阅读使用 `lib/vendor/ecdict/dictionary.json.gz`，首次查询才加载；原词库来源、固定提交、SHA256 和筛选统计记录在同目录 `SOURCE.json`，MIT 许可在 `LICENSE`。转换脚本为 `scripts/build-english-dictionary.js`，从来源提交对应的 `ecdict.csv` 生成压缩词库，构建安装包时直接使用已入库的压缩文件，不下载完整词库或调用用户 API。文字型 PDF、TXT 和 Markdown 支持点词，扫描件与图片不进行 OCR。
+英语阅读使用 `lib/vendor/ecdict/` 内的 `dictionary.json.gz`（常用词和词形）、`extended.json.gz`（扩展词）与 `phrases.json.gz`（短语），分别在首次需要时加载，最多缓存 256 次查询；原词库来源、固定提交、SHA256 和筛选统计记录在同目录 `SOURCE.json`，MIT 许可在 `LICENSE`。转换脚本为 `scripts/build-english-dictionary.js`，从来源提交对应的 `ecdict.csv` 生成压缩词库，构建安装包时直接使用已入库的压缩文件，不下载完整词库或调用用户 API。文字型 PDF、TXT 和 Markdown 支持左键点词与拖选短语（最多 12 个词），拖选高亮不保存为批注；扫描件与图片不进行 OCR。未收录的完整短语仅展示分段释义，不拼接为整句翻译。
 
 ## 加载性能
 
@@ -111,3 +111,9 @@ PDF.js 仅在实际打开 PDF 时动态加载；文本分页分批让出执行�
 `smoke:loading` 使用合成课程比较首次／未变化时传输量，验证外部课程更新、PDF 按需加载和过期页跳过；不读取用户的个人课程。
 
 `smoke:startup` 记录到主页可用的耗时，验证重复启动恢复窗口、主进程延迟加载数学模块，以及 Windows 原生窗口图标与应用资源一致。启动时间受系统缓存和磁盘负载影响，不以单次耗时作为性能保证。
+
+## 官方 ChatGPT 订阅接入
+
+`lib/chatgpt-connection.js` 在主进程实现 OpenAI 的本地开源 OAuth + PKCE 流程，使用动态注册的 issued client ID、稳定 host ID、JWKS 身份验证和权限检查。账号隔离，加密凭据保存到用户数据目录，主进程串行刷新轮换凭据；应用的 single-instance lock 防止同一用户数据目录多进程并发。渲染器仅获得账号标签及模型目录。公开 Responses 接口使用 store:false / stream:true，只有 response.completed 成功，错误无自动付费降级。配置 `mode:chatgpt` 和 chatgpt 下的账号、模型、提示词与 API/Harness 独立，历史按账号／模型隔离。见 [操作与接入范围](docs/chatgpt-subscription.md)。
+
+针对授权校验、凭据隔离、撤销、刷新与流式完成的少量测试：`node --test tests/chatgpt-connection.test.js tests/ai-settings.test.js tests/context-compaction.test.js`。模拟服务不使用真实令牌或订阅额度。

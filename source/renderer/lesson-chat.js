@@ -5,7 +5,7 @@ function setupLessonChat(course) {
   lessonChats.set(course.id, state);
   const layout = document.querySelector('.lesson-layout');
   const panel = document.createElement('aside'); panel.className = 'lesson-ai'; panel.hidden = true;
-  panel.innerHTML = '<header><strong>侧边聊天</strong><button class="icon-button" id="close-lesson-ai" aria-label="关闭提问">×</button></header><div class="context-actions"><button id="lesson-ai-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">压缩上下文</button><button id="lesson-ai-reset" class="compact-button" title="清除当前 API 对话的历史上下文和摘要；本地聊天记录保留" hidden>清除上下文</button></div><div id="lesson-ai-messages" class="lesson-ai-messages"></div><div id="lesson-ai-status" role="status"></div><button id="lesson-ai-clear" class="link-button" hidden>清除选取</button><button id="lesson-ai-desktop" class="btn btn-plain" hidden>在 Codex 中继续</button><textarea id="lesson-ai-input" placeholder="输入问题…" rows="3" maxlength="2500"></textarea><div class="ai-compose-actions"><select id="lesson-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button id="lesson-ai-send" class="btn btn-primary">发送</button></div>';
+  panel.innerHTML = '<header><strong>侧边聊天</strong><button class="icon-button" id="close-lesson-ai" aria-label="关闭提问">×</button></header><div class="context-actions"><button id="lesson-ai-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">压缩上下文</button><button id="lesson-ai-reset" class="compact-button" title="清除当前对话的历史上下文和摘要；本地聊天记录保留" hidden>清除上下文</button></div><div id="lesson-ai-messages" class="lesson-ai-messages"></div><div id="lesson-ai-status" role="status"></div><button id="lesson-ai-clear" class="link-button" hidden>清除选取</button><button id="lesson-ai-desktop" class="btn btn-plain" hidden>在 Codex 中继续</button><textarea id="lesson-ai-input" placeholder="输入问题…" rows="3" maxlength="2500"></textarea><div class="ai-compose-actions"><select id="lesson-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button id="lesson-ai-send" class="btn btn-primary">发送</button></div>';
   document.body.append(panel);
   const floating=setupFloatingChat(panel);
   let panelAnimation=null,panelClosing=false;
@@ -18,7 +18,7 @@ function setupLessonChat(course) {
   const modeSelect=panel.querySelector('#lesson-ai-mode');
   let connection=null,switching=false,compacting=false;
   const compactButton=panel.querySelector('#lesson-ai-compact'),resetButton=panel.querySelector('#lesson-ai-reset');
-  const updateConnection=config=>{connection=config;StudyAI.populate(modeSelect,config);modeSelect.disabled=state.busy||switching;compactButton.disabled=state.busy||switching||loadingHistory;resetButton.hidden=config.mode!=='api';resetButton.disabled=state.busy||switching||loadingHistory;};
+  const updateConnection=config=>{connection=config;StudyAI.populate(modeSelect,config);modeSelect.disabled=state.busy||switching;compactButton.disabled=state.busy||switching||loadingHistory;resetButton.hidden=!['api','chatgpt'].includes(config.mode);resetButton.disabled=state.busy||switching||loadingHistory;};
   window.study.getAISettings().then(config=>{if(panel.isConnected&&!connection)updateConnection(config);}).catch(e=>{state.status=e.message;render();});
   modeSelect.onchange=async()=>{
     if(state.busy||switching||!connection)return;
@@ -38,7 +38,7 @@ function setupLessonChat(course) {
     list.scrollTop=preserve?oldTop+list.scrollHeight-oldHeight:list.scrollHeight;lastScroll=list.scrollTop;send.textContent=state.busy?'停止等待':'发送';send.disabled=loadingHistory||switching;input.disabled=state.busy;modeSelect.disabled=state.busy||switching||!connection;
     compactButton.disabled=state.busy||switching||loadingHistory||!connection;compactButton.textContent=compacting?'压缩中…':'压缩上下文';
     compactButton.title=historyPage.summary?'当前上下文摘要（AI 生成，可对照历史核查）：\n'+historyPage.summary.text:'压缩发送的上下文，保留本地聊天记录';
-    resetButton.hidden=connection?.mode!=='api';resetButton.disabled=state.busy||switching||loadingHistory;
+    resetButton.hidden=!['api','chatgpt'].includes(connection?.mode);resetButton.disabled=state.busy||switching||loadingHistory;
     clear.hidden=!state.fragments.length;clear.disabled=state.busy;
     fragments.replaceChildren();
     state.fragments.forEach((text,i)=>{
@@ -111,7 +111,7 @@ function setupLessonChat(course) {
     finally{state.busy=false;compacting=false;render();}
   };
   resetButton.onclick=async()=>{
-    if(state.busy||loadingHistory||switching||connection?.mode!=='api')return;
+    if(state.busy||loadingHistory||switching||!['api','chatgpt'].includes(connection?.mode))return;
     state.busy=true;render();
     try{const result=await window.study.clearContext({scope:'lesson',courseId:course.id});historyPage.summary=null;state.status=result.message;}
     catch(e){state.status=e.message;}

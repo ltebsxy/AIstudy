@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 ltebsxy
 // SPDX-License-Identifier: GPL-3.0-only
-const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, screen, desktopCapturer, clipboard, safeStorage, nativeImage, nativeTheme, net } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 // Keep the existing data and Chromium storage after changing the product name.
@@ -42,6 +42,7 @@ const { resolveWorkTarget, validateDefaultWriter } = require('./lib/writing-sett
 const { AISettings } = require('./lib/ai-settings');
 const { ChatHistory } = require('./lib/chat-history');
 const { AIService } = require('./lib/ai-service');
+const { ChatGPTConnection, USAGE_URL } = require('./lib/chatgpt-connection');
 const { Library } = require('./lib/library');
 const { extensions:readingExtensions,inspectDocument,normalizeReadingAnnotations }=require('./lib/reading-document');
 const { ProgrammingWorkspaces, importFolder, validateFiles } = require('./lib/programming-workspace');
@@ -94,7 +95,15 @@ const desktopCodex = new DesktopCodex({
 
 const aiSettings = new AISettings(app.getPath('userData'), safeStorage, readPreferences);
 const chatHistory = new ChatHistory(path.join(app.getPath('userData'), 'chats'));
-const aiService = new AIService(aiSettings, chatHistory, desktopCodex, codexClient);
+// Use Chromium's network stack/system proxy; omit browser cookies from all OAuth/API calls.
+const chatgptConnection = new ChatGPTConnection(app.getPath('userData'), safeStorage,{
+  fetch:(url,options)=>net.fetch(url,{...options,credentials:'omit',bypassCustomProtocolHandlers:true})
+});
+const aiService = new AIService(aiSettings, chatHistory, desktopCodex, codexClient, chatgptConnection);
+function broadcastAISettings(result=aiSettings.public()){
+  for(const win of [mainWindow,overlayWindow,writerWindow,programmingChatWindow].filter(w=>w&&!w.isDestroyed()))win.webContents.send('ai:settings',result);
+}
+function guardAISettings(){if(aiService.active||gradingBusy||chatgptConnection.pending)throw new Error('请等待当前 AI 请求或登录完成再修改连接。');}
 const executableFolder=path.dirname(process.execPath);
 const libraryRoot=process.env.STUDY_DATA_DIR?path.join(app.getPath('userData'),'library'):app.isPackaged?path.join(path.basename(executableFolder)==='win-unpacked'?path.dirname(executableFolder):executableFolder,'data'):path.resolve(__dirname,'../app/data');
 const library=new Library(libraryRoot);
@@ -469,18 +478,37 @@ app.whenReady().then(() => {
   });
   register('ai:settings:get', () => aiSettings.public());
   register('ai:mode', mode => {
-    if(aiService.active||gradingBusy)throw new Error('请等待当前 AI 回复完成再切换连接。');
+    guardAISettings();
     const result=aiSettings.switchMode(mode);
-    for(const win of [mainWindow,overlayWindow,writerWindow].filter(w=>w&&!w.isDestroyed()))win.webContents.send('ai:settings',result);
+    broadcastAISettings(result);
     return result;
   });
   register('ai:settings:save', input => {
-    if(aiService.active||gradingBusy)throw new Error('请等待当前 AI 回复完成再修改连接。');
+    guardAISettings();
+    if(input.chatgpt?.accountId){
+      const account=chatgptConnection.account(input.chatgpt.accountId);
+      input.chatgpt.accountLabel=account.label+(account.email?' · '+account.email:'');
+      input.chatgpt.modelName=chatgptConnection.models.get(account.id)?.find(m=>m.slug===input.chatgpt.model)?.displayName||input.chatgpt.model;
+    }
     const result=aiSettings.save(input);
     if(result.harness.kind==='codex')selectThread(result.harness.threadId);
-    for(const win of [mainWindow,overlayWindow,writerWindow].filter(w=>w&&!w.isDestroyed()))win.webContents.send('ai:settings',result);
+    broadcastAISettings(result);
     return result;
   });
+  register('chatgpt:state',()=>chatgptConnection.publicState());
+  register('chatgpt:login',async input=>{
+    guardAISettings();
+    const result=await chatgptConnection.login(input||{},url=>shell.openExternal(url));
+    return {...result,pending:false};
+  });
+  register('chatgpt:cancel',()=>chatgptConnection.cancelLogin());
+  register('chatgpt:models',id=>chatgptConnection.listModels(id));
+  register('chatgpt:logout',async id=>{
+    guardAISettings();
+    const result=await chatgptConnection.logout(id);broadcastAISettings();return result;
+  });
+  register('chatgpt:welcome',id=>chatgptConnection.acknowledgeWelcome(id));
+  register('chatgpt:usage',()=>shell.openExternal(USAGE_URL));
   register('chat:history', ({scope='lesson',courseId,before}) => aiService.page(scope,courseId,before));
   register('chat:compact', ({scope,courseId}) => {
     if(gradingBusy)throw new Error('请等待批改完成后再压缩。');
@@ -504,6 +532,17 @@ app.whenReady().then(() => {
     const imported=library.importPDF(result.filePaths[0],input);
     rememberImportDirectory('reading',result.filePaths[0]);
     return imported;
+  });
+  let folderImportBusy=false;
+  register('library:importReadingFolder',async input=>{
+    if(folderImportBusy)throw new Error('正在导入文件夹，请稍候。');
+    folderImportBusy=true;
+    try{
+      const result=await dialog.showOpenDialog(mainWindow,{title:'导入读写文件夹',defaultPath:importDirectory('reading'),properties:['openDirectory']});
+      if(result.canceled||!result.filePaths.length)return null;
+      const imported=await library.importFolder(result.filePaths[0],input);
+      rememberImportDirectory('reading',result.filePaths[0]);return imported;
+    }finally{folderImportBusy=false;}
   });
   register('courses:list', () => readCourses().map(learnerCourse));
   register('courses:sync', async knownRevision => {
@@ -601,7 +640,7 @@ app.whenReady().then(() => {
     if(courseId!==programmingCourseId)throw new Error('编程工作区已切换。');
     programmingCourse(courseId);
     const config=aiSettings.read();
-    if(config.mode!=='api')throw new Error('文件修改建议仅支持 API 连接，请在 AI 设置中选择 API。');
+    if(!['api','chatgpt'].includes(config.mode))throw new Error('文件修改建议仅支持 API 或 ChatGPT 订阅连接，请在 AI 设置中选择。');
     const text=String(instruction||'').trim().slice(0,2500);
     if(!text)throw new Error('请描述希望 AI 修改的内容。');
     const context=programmingWorkspaces.context(courseId);
@@ -716,7 +755,7 @@ app.whenReady().then(() => {
     if(!['exercise','reading'].includes(mode))throw new Error('学习模式无效。');
     if (selectionWindow || aiService.active || gradingBusy) throw new Error('请先结束截图或等待当前 AI 回复完成。');
     let course = readCourses().find(item=>item.id===id);
-    if(mode==='reading'&&typeof id==='string'&&id.startsWith('document:')){const document=library.document(id.slice(9));course={id,title:document.name,questions:[],workTarget:{type:'file',filePath:document.file}};}
+    if(mode==='reading'&&typeof id==='string'&&id.startsWith('document:')){const document=library.document(id.slice(9));course={id,title:document.name,readingMode:document.readingMode||'standard',questions:[],workTarget:{type:'file',filePath:document.file}};}
     if(!course && !(id==null&&mode==='reading'))throw new Error('课程不存在。');
     if(!course)course={id:'reading',title:'读写',questions:[],workTarget:{type:'builtin'}};
     const target=mode==='reading'?await readingTarget(course):course;
@@ -759,7 +798,7 @@ app.whenReady().then(() => {
   });
   register('writer:load',()=>{
     if(sessionMode==='reading'){
-      let annotations={pages:[],notes:[]};
+      let annotations={pages:[],notes:[],readingMode:activeCourse?.readingMode||'standard'};
       try{annotations=JSON.parse(fs.readFileSync(writerFile(),'utf8'));}catch(e){
         if(e.code!=='ENOENT')throw e;
         const legacy=path.join(app.getPath('userData'),'writing',path.basename(writerFile()));
@@ -880,7 +919,7 @@ app.whenReady().then(() => {
     try {
       const bundle = prepareGrading({ course, answerInput, screenshots: exercise.answers(), typedAnswers:exercise.typedAnswers(), root: path.join(app.getPath('userData'), 'grading') });
       let message=bundle.prompt,files=[];
-      if(config.mode==='api'||config.harness.kind==='http'){
+      if(['api','chatgpt'].includes(config.mode)||config.harness.kind==='http'){
         const manifest=JSON.parse(fs.readFileSync(path.join(bundle.folder,'批改材料.json'),'utf8'));
         message='题目评分，指出问题，语言精简。\n材料：\n'+JSON.stringify(manifest);
         files=[...new Set([manifest.answerFile,...manifest.questions.flatMap(q=>[q.imageFile,q.answerFile])].filter(Boolean))].map(file=>path.join(bundle.folder,file));
@@ -923,5 +962,5 @@ app.whenReady().then(() => {
   register('submission:openFolder', (folder) => shell.openPath(folder));
 });
 
-app.on('before-quit', () => { aiService.active?.abort(); codexClient.close(); desktopCodex.close(); });
+app.on('before-quit', () => { chatgptConnection.cancelLogin();aiService.active?.abort(); codexClient.close(); desktopCodex.close(); });
 app.on('window-all-closed', () => app.quit());

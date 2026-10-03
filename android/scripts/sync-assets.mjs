@@ -1,0 +1,25 @@
+import {cp,mkdir,readFile,writeFile} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import path from 'node:path';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
+const source=path.resolve(root,'../source'), assets=path.join(root,'app/src/main/assets');
+await mkdir(path.join(assets,'vendor'),{recursive:true});
+for(const name of ['katex','pdfjs']) await cp(path.join(source,'renderer/vendor',name),path.join(assets,'vendor',name),{recursive:true});
+await cp(path.join(source,'lib/vendor/ecdict'),path.join(assets,'vendor/ecdict'),{recursive:true});
+await cp(path.join(source,'assets/icon.svg'),path.join(assets,'vendor/icon.svg'));
+await cp(path.join(source,'renderer/math.js'),path.join(assets,'math.js'));
+await mkdir(path.join(root,'app/src/main/res/drawable'),{recursive:true});
+await cp(path.join(source,'assets/icon.png'),path.join(root,'app/src/main/res/drawable/icon.png'));
+await cp(path.resolve(root,'../LICENSE'),path.join(assets,'vendor/PROJECT-LICENSE'));
+await cp(path.resolve(root,'../THIRD_PARTY_NOTICES.md'),path.join(assets,'vendor/DESKTOP-NOTICES.md'));
+// Same lookup algorithm and inflection records as desktop. Only I/O is adapted.
+let dict=await readFile(path.join(source,'lib/english-dictionary.js'),'utf8');
+dict=dict.replace(/const fs=.*?const posNames=/s,'const posNames=');
+dict=dict.replace(/constructor\(file=.*?\)\{/,'constructor(file="vendor/ecdict/dictionary.json"){');
+dict=dict.replace(/fs\.readFile\(this\.file\)\.then\(unzip\)\.then\(bytes=>JSON\.parse\(bytes\.toString\('utf8'\)\)\)/g,'readPart(this.file)');
+dict=dict.replace(/fs\.readFile\(path\.join\(path\.dirname\(this\.file\),name\+'\.json\.gz'\)\)\.then\(unzip\)\.then\(bytes=>JSON\.parse\(bytes\.toString\('utf8'\)\)\)/g,'readPart("vendor/ecdict/"+name+".json")');
+dict=dict.replace('module.exports={EnglishDictionary,normalizeWord,normalizeQuery};','export {EnglishDictionary,normalizeWord,normalizeQuery};');
+dict='async function readPart(url){const response=await fetch(url);if(!response.ok)throw new Error("词库读取失败");return response.json();}\n'+dict;
+if(/\brequire\(|\bfs\.|\bpath\.|\bunzip\b|module\.exports/.test(dict)) throw new Error('Dictionary adapter source changed; review required.');
+await writeFile(path.join(assets,'dictionary.mjs'),dict);
+console.log('Synced local dictionary, PDF, math, icon and licenses; no reading materials or personal data.');

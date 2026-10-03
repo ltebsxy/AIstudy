@@ -1,14 +1,42 @@
 {
-  "name": "ECDICT compact core",
+  "name": "ECDICT layered English-Chinese dictionary",
   "source": "https://github.com/skywind3000/ECDICT/tree/bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
   "revision": "bc015ed2e24a7abef49fc6dbbb7fe32c1dadaf8b",
   "sourceFile": "ecdict.csv",
   "sourceSHA256": "1a6947e04785db63613a92e14903cdae7954f7e84860b10e68e5c7cbb3f9c3cf",
-  "selection": "Single words with BNC/COCA rank <= 30000, exam tags, Oxford flag, Collins stars, and common contractions; inflections from exchange.",
-  "entries": 37332,
-  "forms": 32324,
-  "uncompressedBytes": 3533183,
-  "compressedBytes": 1269745,
+  "selection": "Core: BNC/COCA <= 60000, exam tags, Oxford, Collins and contractions. Extended: additional single words with English definitions or computer labels. Phrases: ranked/defined expressions or expressions of core words excluding specialist labels. Inflections from exchange.",
+  "entries": 58226,
+  "forms": 46538,
+  "uncompressedBytes": 5338850,
+  "compressedBytes": 1898392,
   "license": "MIT",
-  "dictionarySHA256": "1b6bd07771d982e370f159403fc88dd986a4dc6a792a01c9dadc1c6e06d19cf0"
+  "dictionarySHA256": "ce7045e9be6f780ea1909814849e089c9778421b9afd08f295ed3113b3dfcd96",
+  "parts": [
+    {
+      "file": "dictionary.json.gz",
+      "entries": 58226,
+      "forms": 46538,
+      "uncompressedBytes": 5338850,
+      "compressedBytes": 1898392,
+      "SHA256": "ce7045e9be6f780ea1909814849e089c9778421b9afd08f295ed3113b3dfcd96"
+    },
+    {
+      "file": "extended.json.gz",
+      "entries": 115587,
+      "forms": 0,
+      "uncompressedBytes": 8646988,
+      "compressedBytes": 2997030,
+      "SHA256": "2e9db56415fce5fc2ceaee37e0be11968b589ec78ce587536f9d7e19ba355b13"
+    },
+    {
+      "file": "phrases.json.gz",
+      "entries": 105337,
+      "forms": 0,
+      "uncompressedBytes": 5923882,
+      "compressedBytes": 2069742,
+      "SHA256": "6e29e13fa3e4043c9bf49a2743166a5ef25a638ea12662ee2a24544313408513"
+    }
+  ],
+  "totalEntries": 279150,
+  "totalCompressedBytes": 6965164
 }

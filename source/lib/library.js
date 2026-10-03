@@ -2,6 +2,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { inspectDocument,extensions } = require('./reading-document');
+const {readReadingPack}=require('./reading-pack');
 const modes = ['study','reading'];
 const blank = () => ({version:2,folders:[],courses:{},documents:[],selection:{mode:'study'},views:{study:{folderId:'',layout:'cards'},reading:{folderId:'',layout:'cards'}}});
 class Library {
@@ -83,6 +84,38 @@ class Library {
     fs.mkdirSync(path.dirname(target),{recursive:true});fs.copyFileSync(file,target,fs.constants.COPYFILE_EXCL);
     data.documents.push({id,name:path.basename(file),relativeFile,...destination,size:info.size,format:info.extension,updatedAt:new Date().toISOString()});
     try{this.write(data);}catch(e){fs.unlinkSync(target);throw e;}return data;
+  }
+  async importFolder(directory,input={}){
+    this.location(this.read(),{mode:'reading',folderId:input.folderId||''});
+    const pack=await readReadingPack(directory),copied=[];
+    try{
+      await fs.promises.mkdir(path.join(this.root,'documents'),{recursive:true});
+      for(const item of pack.documents){
+        const id=randomUUID(),relativeFile=`documents/${id}.${item.info.extension}`,target=path.join(this.root,relativeFile);
+        await fs.promises.copyFile(item.file,target,fs.constants.COPYFILE_EXCL);
+        copied.push({id,target,relativeFile,item});
+      }
+      // Re-read after asynchronous copies so navigation and concurrent metadata edits survive.
+      const data=this.read(),destination=this.location(data,{mode:'reading',folderId:input.folderId||''}),now=new Date().toISOString();
+      let name=pack.title,n=2;
+      while(data.folders.some(folder=>folder.mode==='reading'&&folder.parentId===destination.folderId&&folder.name===name))name=pack.title.slice(0,70)+` (${n++})`;
+      const folderId=randomUUID(),folders=new Map([['',folderId]]);
+      data.folders.push({id:folderId,name,mode:'reading',parentId:destination.folderId,updatedAt:now});
+      function folderFor(relative){
+        const parts=relative.split('/');parts.pop();let relativeFolder='',parentId=folderId;
+        for(const part of parts){
+          relativeFolder=relativeFolder?relativeFolder+'/'+part:part;
+          if(!folders.has(relativeFolder)){const id=randomUUID();folders.set(relativeFolder,id);data.folders.push({id,name:part,parentId,mode:'reading',updatedAt:now});}
+          parentId=folders.get(relativeFolder);
+        }
+        return parentId;
+      }
+      for(const {id,relativeFile,item} of copied)data.documents.push({id,name:item.name,relativeFile,folderId:folderFor(item.relative),size:item.info.size,format:item.info.extension,readingMode:pack.readingMode,updatedAt:now});
+      data.selection={mode:'reading'};data.views.reading.folderId=folderId;this.write(data);
+      return {library:data,imported:copied.length,skipped:pack.skipped,folderName:name};
+    }catch(error){
+      await Promise.all(copied.map(({target})=>fs.promises.unlink(target).catch(()=>{})));throw error;
+    }
   }
   document(id){
     const item=this.read().documents.find(x=>x.id===id);

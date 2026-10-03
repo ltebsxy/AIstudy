@@ -20,6 +20,8 @@ renderer/vendor/
 .env.*
 !.env.example
 ai-settings.json*
+chatgpt-accounts.json*
+chatgpt-login-status.json*
 preferences.json*
 courses.json*
 courses-before-*.json*
@@ -35,6 +37,10 @@ study-desk/
 *.pem
 *.key
 *.pfx
+*.jks
+*.keystore
+*.apk
+*.idsig
 .codex/
 .DS_Store
 Thumbs.db
