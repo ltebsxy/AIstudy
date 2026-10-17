@@ -10,7 +10,7 @@ async function main(){
     const page=app.windows().find(page=>page.url().endsWith('/index.html'));page.setDefaultTimeout(10000);
     await page.getByText('我的学习空间',{exact:true}).waitFor();await page.locator('[data-mode="reading"]').click();
     await app.evaluate(({dialog},input)=>{dialog.showOpenDialog=async(_window,options)=>{if(!options.properties.includes('openDirectory'))throw Error('Folder dialog expected');return {canceled:false,filePaths:[input]};};},input);
-    await page.locator('#import-reading-folder').click();await page.getByText('已导入 1 个文件。',{exact:true}).waitFor();
+    await page.locator('#library-import').click();await page.locator('#import-reading-folder').click();await page.getByText('已导入 1 个文件。',{exact:true}).waitFor();
     await page.locator('[data-folder]').click();await page.getByText('01 · Learning with AI',{exact:true}).waitFor();assert(!(await page.getByText('answers.md',{exact:true}).count()));
     const opened=app.waitForEvent('window',{timeout:10000});await page.locator('.read-document').click();const writer=await opened;await writer.waitForURL('**/writer.html');await writer.waitForFunction(()=>ready&&legacy.readingMode==='english',null,{timeout:10000});
     assert.equal(await writer.evaluate(()=>tool),'hand');assert.equal(await writer.evaluate(()=>board.strokes.length),0);

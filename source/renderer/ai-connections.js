@@ -11,17 +11,18 @@ const StudyAI = (() => {
     const template=templates.find(t=>t.provider===config.api.provider&&t.model===config.api.model);
     return template?.modelName||config.api.model||'API（未配置模型）';
   }
-  function harnessName(config) { return config.harness.kind==='codex'?'Codex':config.harness.name||'自定义 Harness'; }
   function chatgptName(config){return 'ChatGPT 订阅 · '+(config.chatgpt?.modelName||config.chatgpt?.model||'未配置');}
-  function label(config) {return config.mode==='chatgpt'?chatgptName(config):config.mode==='api'?apiName(config):harnessName(config);}
+  function label(config) {return config.mode==='chatgpt'?chatgptName(config):config.mode==='api'?apiName(config):'请选择 AI 连接';}
   function populate(select,config) {
-    select.replaceChildren(new Option(harnessName(config),'harness'),new Option(apiName(config),'api'),new Option(chatgptName(config),'chatgpt'));
+    select.replaceChildren(new Option(apiName(config),'api'),new Option(chatgptName(config),'chatgpt'));
+    if(!['api','chatgpt'].includes(config.mode)){const option=new Option('请选择 AI 连接','unconfigured');option.disabled=true;select.prepend(option);}
     select.value=config.mode;select.title='切换 AI 连接 · '+label(config);
     const parent=select.parentElement;
+    let notice=parent.querySelector('.connection-notice');if(!notice){notice=document.createElement('small');notice.className='connection-notice';parent.append(notice);}notice.textContent=config.connectionNotice||'';notice.hidden=!notice.textContent;
     let usage=parent.querySelector('.chatgpt-usage');
     if(!usage){usage=document.createElement('small');usage.className='chatgpt-usage';const text=document.createElement('span');text.textContent='使用 ChatGPT 订阅';const button=document.createElement('button');button.className='link-button';button.type='button';button.textContent='管理额度';button.onclick=()=>window.study.manageChatGPTUsage().catch(()=>{});usage.append(text,button);parent.append(usage);}
     usage.hidden=config.mode!=='chatgpt';
     usage.title=config.chatgpt?.accountLabel||'在 AI 设置中选择 ChatGPT 账号';
   }
-  return {templates,apiName,harnessName,label,populate};
+  return {templates,apiName,label,populate};
 })();

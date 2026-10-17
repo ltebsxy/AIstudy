@@ -42,7 +42,7 @@ async function main(){
   }
   try{
     await launch();
-    await page.evaluate(base=>window.study.saveAISettings({mode:'api',api:{provider:'custom',baseUrl:base,model:'local-test',apiKey:'synthetic-test-key'},harness:{kind:'codex',threadId:'',endpoint:'',sessionId:'study'}}),`http://127.0.0.1:${server.address().port}/v1`);
+    await page.evaluate(base=>window.study.saveAISettings({mode:'api',api:{provider:'custom',baseUrl:base,model:'local-test',apiKey:'synthetic-test-key'}}),`http://127.0.0.1:${server.address().port}/v1`);
     // Verify that the editor can create all types and preserve references/options on save.
     await page.getByTitle('编辑',{exact:true}).click();
     assert.equal(await page.locator('.question-type').nth(0).inputValue(),'choice');

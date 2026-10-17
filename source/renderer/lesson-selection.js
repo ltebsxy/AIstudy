@@ -21,32 +21,37 @@ function selectedLessonText(root, range) {
   return read(root).trim();
 }
 
-function setupLessonSelection(root, onAdd, isBusy) {
+function setupLessonSelection(root, onAdd, isBusy, onNote) {
+  const actions=document.createElement('div');actions.className='lesson-selection-actions';actions.hidden=true;
   const button = document.createElement('button');
   button.id = 'add-to-lesson-chat'; button.className = 'lesson-selection-action';
   button.textContent = '加入侧边聊天'; button.hidden = true;
-  document.body.append(button);
+  const noteButton=document.createElement('button');noteButton.id='add-to-note';noteButton.className='lesson-selection-action';noteButton.textContent='加入笔记';
+  if(onAdd)actions.append(button);if(onNote)actions.append(noteButton);document.body.append(actions);
   let selected = '';
   function update() {
     const selection = window.getSelection();
     const range = selection.rangeCount ? selection.getRangeAt(0) : null;
     selected = !isBusy() && root.isConnected ? selectedLessonText(root, range) : '';
     button.hidden = !selected;
+    actions.hidden=!selected;
     if (!selected) return;
     const rect = range.getBoundingClientRect();
-    if (rect.bottom < 0 || rect.top > innerHeight) { button.hidden = true; return; }
-    button.style.left = `${Math.max(8, Math.min(rect.left, document.documentElement.clientWidth - button.offsetWidth - 8))}px`;
-    button.style.top = `${Math.max(8, Math.min(rect.top >= 44 ? rect.top - 40 : rect.bottom + 6, innerHeight - button.offsetHeight - 8))}px`;
+    if (rect.bottom < 0 || rect.top > innerHeight) { actions.hidden=true;button.hidden = true; return; }
+    actions.style.left = `${Math.max(8, Math.min(rect.left, document.documentElement.clientWidth - actions.offsetWidth - 8))}px`;
+    actions.style.top = `${Math.max(8, Math.min(rect.top >= 44 ? rect.top - 40 : rect.bottom + 6, innerHeight - actions.offsetHeight - 8))}px`;
   }
   button.onpointerdown = e => e.preventDefault();
   button.onclick = () => {
     if (!selected || isBusy()) return;
     const text = selected;
     button.hidden = true;
+    actions.hidden=true;
     window.getSelection().removeAllRanges();
     onAdd(text);
   };
-  const escape = e => { if (e.key === 'Escape') button.hidden = true; };
+  noteButton.onpointerdown=e=>e.preventDefault();noteButton.onclick=()=>{if(!selected||isBusy())return;const text=selected;actions.hidden=true;window.getSelection().removeAllRanges();onNote(text);};
+  const escape = e => { if (e.key === 'Escape'){button.hidden = true;actions.hidden=true;} };
   document.addEventListener('selectionchange', update);
   document.addEventListener('keydown', escape);
   window.addEventListener('resize', update);
@@ -56,6 +61,6 @@ function setupLessonSelection(root, onAdd, isBusy) {
     document.removeEventListener('keydown', escape);
     window.removeEventListener('resize', update);
     window.removeEventListener('scroll', update, true);
-    button.remove();
+    actions.remove();
   };
 }

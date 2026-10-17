@@ -1,0 +1,11 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+:root,:root[data-theme=dark]{--surface:var(--ui-surface);--line:var(--ui-border);--muted:var(--ui-muted);--accent:var(--ui-accent);--active:var(--ui-selected);--paper:var(--ui-page);color:var(--ui-text);background:var(--ui-page)}
+button,input,select,textarea{border-radius:var(--ui-radius);border-color:var(--ui-border)}
+button{background:var(--ui-surface);color:var(--ui-text)}button:hover:not(:disabled){background:var(--ui-hover)}
+input,select,textarea{background:var(--ui-input)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--ui-accent);outline-offset:2px}
+header{background:var(--ui-surface)}
+dialog,#translation,.item{border-radius:var(--ui-panel-radius);border-color:var(--ui-border)}
+#translation,dialog{box-shadow:var(--ui-shadow)}
+#translation footer{gap:8px}.translation-actions{gap:8px}.translation-actions button{min-height:32px;padding:5px 8px;font-size:12px}
+.reading-note{padding:14px 0}#reader-tools{background:var(--ui-surface)}

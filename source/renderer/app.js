@@ -13,7 +13,7 @@ let lastSessionMode = 'exercise';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const byId = (id) => courses.find((course) => course.id === id);
 function notify(message) { toast.textContent = message; toast.classList.add('show'); clearTimeout(toastTimer); toastTimer = setTimeout(() => toast.classList.remove('show'), 3500); }
-function nav(which) { disposeLessonChat(); document.getElementById('nav-home').classList.toggle('active', which === 'home'); document.getElementById('nav-settings').classList.toggle('active',which==='settings'); }
+function nav(which) { disposeLessonChat();disposeNoteEditor(); document.getElementById('nav-home').classList.toggle('active', which === 'home');document.getElementById('nav-knowledge').classList.toggle('active',which==='knowledge'); document.getElementById('nav-settings').classList.toggle('active',which==='settings'); }
 function friendlyError(error) { return (error?.message || String(error)).replace(/^Error invoking remote method '[^']+': (?:Error: )?/, ''); }
 function errorMessage(error) { notify(friendlyError(error)); }
 
@@ -34,6 +34,7 @@ function renderEditor(id) {
   draft = id ? structuredClone(byId(id)) : { title: '', description: '', knowledge: '', kind:'standard', questions: [{ text: '', image: '' }], workTarget: { type: 'default' } };
   draft.workTarget ||= { type: 'file', filePath: draft.workFile || '' };
   delete draft.workFile;
+  draft.noteFolderId=libraryState.noteDestinations[id]?.folderId||'';
   targetDrafts = { [draft.workTarget.type]: structuredClone(draft.workTarget) };
   drawEditor();
 }
@@ -43,6 +44,7 @@ function syncEditor() {
   draft.description = document.getElementById('course-description')?.value ?? draft.description;
   draft.knowledge = document.getElementById('knowledge')?.value ?? draft.knowledge;
   draft.knowledgeFormat = document.getElementById('knowledge-sections')?.checked ? 'sections' : undefined;
+  draft.noteFolderId=document.getElementById('note-destination')?.value??draft.noteFolderId;
   if(draft.kind==='programming'){
     draft.programming ||= {files:[],entryFile:'',editorPath:''};
     draft.programming.entryFile=document.getElementById('programming-entry')?.value||draft.programming.entryFile;
@@ -87,6 +89,7 @@ function drawEditor() {
   format.append(checkbox, '按小节阅读（用单独一行“## 小节标题”分段）');
   document.getElementById('knowledge').after(format);
   StudyMath.editor(document.getElementById('knowledge'));
+  setupNoteDestinationEditor();
   view.querySelectorAll('.question-editor textarea').forEach((textarea) => StudyMath.editor(textarea));
   if (editing) {
     const hint = document.createElement('p'); hint.className = 'target-help';
@@ -134,6 +137,7 @@ function renderLesson(id) {
   } else document.getElementById('finish-lesson').onclick = () => startCourseMode(id, 'exercise');
   setupLessonChat(course);
   setupLessonReader(course);
+  setupCourseNotes(course);
 }
 
 async function startCourseMode(id, mode) {
@@ -151,8 +155,10 @@ async function startCourseMode(id, mode) {
 }
 
 document.getElementById('nav-home').onclick = () => setLibraryView({mode:'study'});
+document.getElementById('nav-knowledge').onclick = () => setLibraryView({mode:'knowledge'});
 window.study.onSubmit((id, options) => renderSubmit(id, options));
-window.study.onPaused((state) => {
+window.study.onPaused(async(state) => {
+  if(view.querySelector('.library-page'))try{await refresh();}catch(e){errorMessage(e);}
   const mode = state?.mode || lastSessionMode;
   if (state?.courseId) currentCourseId = state.courseId;
   notify(mode === 'reading' ? '读写已暂停。' : '练习已暂停，作答已保留。');

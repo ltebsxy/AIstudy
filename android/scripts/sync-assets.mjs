@@ -8,6 +8,7 @@ for(const name of ['katex','pdfjs']) await cp(path.join(source,'renderer/vendor'
 await cp(path.join(source,'lib/vendor/ecdict'),path.join(assets,'vendor/ecdict'),{recursive:true});
 await cp(path.join(source,'assets/icon.svg'),path.join(assets,'vendor/icon.svg'));
 await cp(path.join(source,'renderer/math.js'),path.join(assets,'math.js'));
+await cp(path.join(source,'renderer/ui-tokens.css'),path.join(assets,'ui-tokens.css'));
 await mkdir(path.join(root,'app/src/main/res/drawable'),{recursive:true});
 await cp(path.join(source,'assets/icon.png'),path.join(root,'app/src/main/res/drawable/icon.png'));
 await cp(path.resolve(root,'../LICENSE'),path.join(assets,'vendor/PROJECT-LICENSE'));

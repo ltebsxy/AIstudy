@@ -1,0 +1,40 @@
+/* SPDX-License-Identifier: GPL-3.0-only — shared with the Android reader. */
+:root {
+  --ui-font: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+  --ui-page: #f6f7f4;
+  --ui-surface: #ffffff;
+  --ui-raised: #f5f7f5;
+  --ui-input: #fafcfb;
+  --ui-hover: #edf1ee;
+  --ui-selected: #e5e8e6;
+  --ui-text: #293c35;
+  --ui-muted: #77867e;
+  --ui-border: #dce5df;
+  --ui-accent: #286b5e;
+  --ui-accent-bg: #eaf3ee;
+  --ui-primary: #246c61;
+  --ui-primary-text: #ffffff;
+  --ui-error: #a14d43;
+  --ui-error-bg: #fff1ed;
+  --ui-radius: 10px;
+  --ui-panel-radius: 12px;
+  --ui-shadow: 0 8px 28px #193d321c;
+}
+:root[data-theme="dark"] {
+  --ui-page: #181b1a;
+  --ui-surface: #222725;
+  --ui-raised: #2a302d;
+  --ui-input: #1d221f;
+  --ui-hover: #313834;
+  --ui-selected: #3a423e;
+  --ui-text: #e2e7e4;
+  --ui-muted: #a0afa7;
+  --ui-border: #3b453f;
+  --ui-accent: #a3d8bf;
+  --ui-accent-bg: #293e34;
+  --ui-primary: #a3d8bf;
+  --ui-primary-text: #172c22;
+  --ui-error: #f0afa5;
+  --ui-error-bg: #422e2b;
+  --ui-shadow: 0 8px 28px #0003;
+}

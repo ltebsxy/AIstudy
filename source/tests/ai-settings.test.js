@@ -9,18 +9,22 @@ const {ChatHistory}=require('../lib/chat-history');
 const {AIService}=require('../lib/ai-service');
 const {askHTTP}=require('../lib/ai-http');
 const temporary=()=>fs.mkdtempSync(path.join(os.tmpdir(),'study-ai-unit-'));
-test('settings isolate credentials, retain legacy task, clear secrets on endpoint change',()=>{
+test('retired connections stay offline until explicitly selected; data and credentials are preserved',async t=>{
+ const root=temporary();t.after(()=>fs.rmSync(root,{recursive:true,force:true}));
  const safe={isEncryptionAvailable:()=>true,encryptString:s=>Buffer.from('encoded:'+s),decryptString:b=>b.toString().slice(8)};
- const settings=new AISettings(temporary(),safe,()=>({codexThreadId:'11111111-1111-1111-1111-111111111111'}));
- assert.equal(settings.read().harness.threadId,'11111111-1111-1111-1111-111111111111');
- let c=settings.public();c.mode='api';c.api.apiKey='api-test';c.harness.endpoint='http://localhost:8000/agent';c.harness.token='harness-test';c=settings.save(c);
- assert(c.api.hasKey&&c.harness.hasToken);assert(!JSON.stringify(c).includes('encoded:'));
- const encryptedBefore=settings.read();settings.switchMode('harness');settings.switchMode('api');
- assert.deepEqual(settings.read().api,encryptedBefore.api);assert.deepEqual(settings.read().harness,encryptedBefore.harness);
- assert.equal(settings.secret(settings.read()),'api-test');assert.throws(()=>settings.switchMode('unknown'),/请选择/);
- c.mode='harness';settings.save(c);assert.equal(settings.secret(settings.read()),'harness-test');
- c.api.baseUrl='https://other.example/v1';c=settings.save(c);assert(!c.api.hasKey&&c.harness.hasToken);
- c.harness.endpoint='http://localhost:9000/agent';c=settings.save(c);assert(!c.harness.hasToken);
+ const settings=new AISettings(root,safe);assert.equal(settings.public().mode,'unconfigured');
+ const file=path.join(root,'ai-settings.json');
+ for(const kind of ['codex','http']){
+  const old={mode:'harness',api:{provider:'custom',baseUrl:'https://api.example/v1',model:'saved-model',encryptedKey:Buffer.from('encoded:api-test').toString('base64')},harness:{kind,threadId:'saved-thread',endpoint:'http://localhost:8000/agent',encryptedToken:'untouched-encrypted-token'},chatgpt:{model:'saved-subscription-model'}};
+  const original=JSON.stringify(old);fs.writeFileSync(file,original);let c=settings.public();assert.equal(c.mode,'unconfigured');assert(c.connectionNotice.includes('主动选择'));assert(!('harness' in c));assert(!JSON.stringify(c).includes('encrypted'));assert.equal(fs.readFileSync(file,'utf8'),original);
+  let requests=0;const service=new AIService(settings,{context(){assert.fail('must not read history');}}, {ask(){requests++;}});
+  await assert.rejects(service.chat({scope:'lesson',courseId:'test',question:'test',message:'test'}),/主动选择/);
+  await assert.rejects(service.direct(settings.read(),'test',[]),/主动选择/);await assert.rejects(service.compact({scope:'lesson',courseId:'test'}),/主动选择/);assert.equal(requests,0);
+  assert.throws(()=>settings.switchMode('harness'),/请选择/);await assert.rejects(askHTTP(old,'old-secret',{message:'test'}),/选择 API/);
+  const selected=settings.switchMode('api');assert.equal(selected.mode,'api');assert.equal(settings.secret(settings.read()),'api-test');assert.deepEqual(JSON.parse(fs.readFileSync(file)).harness,old.harness);
+  settings.switchMode('chatgpt');settings.switchMode('api');assert.equal(settings.secret(settings.read()),'api-test');
+  c=settings.public();c.api.baseUrl='https://other.example/v1';c=settings.save(c);assert(!c.api.hasKey);assert.deepEqual(JSON.parse(fs.readFileSync(file)).harness,old.harness);
+ }
  assert.throws(()=>endpoint('http://remote.example/v1'),/HTTPS/);assert.throws(()=>endpoint('https://user:password@example.com'),/账号/);
 });
 test('history cursor survives new messages; only completed context is sent; pending user text is preserved',()=>{

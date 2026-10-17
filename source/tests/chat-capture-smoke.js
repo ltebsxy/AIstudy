@@ -17,12 +17,8 @@ async function main(){
   const errors=[];overlay.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({ipcMain})=>{
    const id='11111111-1111-1111-1111-111111111111';
-   ipcMain.removeHandler('codex:list');ipcMain.handle('codex:list',()=>[{id,title:'测试任务'}]);
-   ipcMain.removeHandler('codex:preferences');ipcMain.handle('codex:preferences',()=>({codexThreadId:id}));
-   ipcMain.removeHandler('codex:connection');ipcMain.handle('codex:connection',()=>({label:'测试连接'}));
-   const ask=async(_id,message)=>{globalThis.__chatMessage=message;if(message.includes('模拟失败'))throw new Error('模拟失败');return '已查看截图。';};
-   process.mainModule.require('./lib/desktop-codex').DesktopCodex.prototype.ask=ask;
-   process.mainModule.require('./lib/codex-client').CodexClient.prototype.ask=ask;
+   const ask=async(_config,message,files)=>{globalThis.__chatMessage=message;globalThis.__chatFiles=files;if(message.includes('模拟失败'))throw new Error('模拟失败');return '已查看截图。';};
+   process.mainModule.require('./lib/ai-service').AIService.prototype.request=ask;
   });
   await app.evaluate(({shell})=>{shell.openPath=async()=>'';});
   await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
@@ -35,7 +31,7 @@ async function main(){
    await cap.mouse.move(100,180);await cap.mouse.down();await cap.mouse.move(260,280);await cap.mouse.up();
    await cap.getByRole('button',{name:chat?'加入 AI 输入':`保存第 ${number} 题并继续`}).click();
   }
-  await page.evaluate(()=>window.study.selectCodexThread('11111111-1111-1111-1111-111111111111'));
+  await page.evaluate(()=>window.study.switchAIMode('api'));
   await overlay.locator('#toggle-chat').click();
   await capture(true,1);await overlay.locator('.chat-attachment').waitFor();
   assert.equal(await overlay.evaluate(()=>index),0);assert.deepEqual(await overlay.evaluate(()=>captured),[]);assert.equal(await visible(),false);
@@ -45,7 +41,7 @@ async function main(){
   await overlay.locator('#chat-input').fill('这一步对吗？');await overlay.locator('#send-message').click();await overlay.getByText('已查看截图。',{exact:true}).waitFor();
   const prompt=await app.evaluate(()=>globalThis.__chatMessage);
   assert(prompt.includes('第一题'));assert(prompt.includes('这一步对吗？'));
-  const file=prompt.split('\n').at(-1);assert.equal(fs.readFileSync(file).toString('base64'),preview.split(',')[1]);assert.equal(await overlay.locator('.chat-attachment').count(),0);
+  const file=await app.evaluate(()=>globalThis.__chatFiles[0]);assert.equal(fs.readFileSync(file).toString('base64'),preview.split(',')[1]);assert.equal(await overlay.locator('.chat-attachment').count(),0);
   await overlay.locator('#toggle-chat').click();await capture(false,1);await overlay.getByText('最后一题',{exact:true}).waitFor();
   assert.deepEqual(await overlay.evaluate(()=>captured),[0]);
   await overlay.locator('#toggle-chat').click();await capture(true,2,true);assert.equal(await overlay.locator('.chat-attachment').count(),0);

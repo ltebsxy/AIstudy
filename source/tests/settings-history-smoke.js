@@ -10,7 +10,7 @@ async function main(){
  const course=normalizeCourse({title:'设置与记录验证',knowledge:'选取这个定义。',questions:[{text:'题目一',grading:{answer:'参考结论',criteria:[{points:10,text:'推导正确'}]}}]});
  fs.writeFileSync(path.join(data,'courses.json'),JSON.stringify([course]));
  const requests=[];
- const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const json=JSON.parse(body);requests.push({url:req.url,auth:req.headers.authorization,body:json});res.setHeader('Content-Type','application/json');const answer=JSON.stringify(json).includes('压缩学习对话为')?'压缩摘要：已掌握定义，继续讨论反函数。':'API 回复 '+requests.length+'：$x^2$';res.end(JSON.stringify(req.url==='/agent'?{reply:'Harness 已回复'}:{choices:[{message:{content:answer}}]}));});
+ const server=http.createServer(async(req,res)=>{let body='';for await(const chunk of req)body+=chunk;const json=JSON.parse(body);requests.push({url:req.url,auth:req.headers.authorization,body:json});res.setHeader('Content-Type','application/json');const answer=JSON.stringify(json).includes('压缩学习对话为')?'压缩摘要：已掌握定义，继续讨论反函数。':'API 回复 '+requests.length+'：$x^2$';res.end(JSON.stringify({choices:[{message:{content:answer}}]}));});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`;
  let app;
  async function launch(){app=await _electron.launch({executablePath:process.env.STUDY_TEST_EXE||require('electron'),args:process.env.STUDY_TEST_EXE?[]:[root],cwd:root,env:{...process.env,STUDY_DATA_DIR:data}});await app.firstWindow();if(app.windows().length<2)await app.waitForEvent('window');for(const p of app.windows())if(await p.title()==='AI-StudyDesk'){await p.getByText('我的学习空间',{exact:true}).waitFor();return p;}}
@@ -23,7 +23,7 @@ async function main(){
   await app.evaluate(({shell})=>{globalThis.writerURL='';shell.openExternal=async url=>{globalThis.writerURL=url;};});await page.evaluate(id=>window.study.startSession(id),course.id);assert.equal(await app.evaluate(()=>globalThis.writerURL),'onenote:https://example.com/test');await page.evaluate(()=>window.study.pauseSession());
   await page.locator('[data-settings-tab="writing"]').click();await page.locator('#default-writer').waitFor();assert.equal(await page.locator('#default-writer').inputValue(),'onenote');await page.locator('#default-writer').selectOption('builtin');await page.locator('#save-writing-settings').click();await page.getByText('已保存默认写字程序。',{exact:true}).waitFor();await page.locator('#writing-back').click();
   await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#api-url').waitFor();
-  await page.locator('.harness-notice').getByText('存在诸多问题，建议不使用',{exact:true}).waitFor();
+  assert.equal(await page.locator('[name="ai-mode"]').count(),2);
   await page.getByRole('button',{name:'DeepSeek · V4.1 Flash',exact:true}).click();
   assert.equal(await page.locator('#api-url').inputValue(),'https://api.deepseek.com');assert.equal(await page.locator('#api-model').inputValue(),'deepseek-flash');assert(await page.locator('[name="ai-mode"][value="api"]').isChecked());
   await page.locator('#api-key').fill('temporary-template-key');await page.getByRole('button',{name:'DeepSeek · V4.1 Flash',exact:true}).click();assert.equal(await page.locator('#api-key').inputValue(),'temporary-template-key');
@@ -34,7 +34,7 @@ async function main(){
   const saved=fs.readFileSync(path.join(data,'ai-settings.json'),'utf8');assert(!saved.includes('test-api-secret'));
   const publicConfig=await page.evaluate(()=>window.study.getAISettings());assert(!JSON.stringify(publicConfig).includes('encrypted'));assert(publicConfig.api.hasKey);
   await page.screenshot({path:path.join(root,'.tmp','ai-settings.png')});
-  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
+  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'AI 问答',exact:true}).click();
   assert.equal(await page.locator('#lesson-ai-thread').count(),0);
   for(let i=1;i<=6;i++){
    await page.locator('#lesson-ai-input').fill(`问题 ${i}：`+'请保留定义的必要条件，并解释反函数定义域与值域的关系。'.repeat(4));await page.locator('#lesson-ai-send').click();
@@ -44,7 +44,7 @@ async function main(){
   assert.deepEqual(requests[0].body.messages.map(x=>x.role),['system','user']);assert.equal(requests[0].body.messages[0].content,'测试自定义：用简洁中文解释，数学严谨。');
   assert(requests.every(r=>r.body.messages.filter(x=>x.role==='system').length===1));
   assert.equal(requests[1].body.messages.length,4);assert(requests[1].body.messages[1].content.includes('问题 1'));
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
+  await page.getByRole('button',{name:'关闭 AI 问答'}).click();await page.getByRole('button',{name:'AI 问答',exact:true}).click();
   await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===5);
   assert((await page.locator('.lesson-ai-message').last().innerText()).includes('API 回复 6'));
   await page.locator('.history-more').evaluate(button=>button.click());
@@ -53,9 +53,9 @@ async function main(){
   const texts=await page.locator('.lesson-ai-message').allTextContents();assert.equal(new Set(texts).size,12);
   await page.locator('.lesson-content').evaluate(el=>{const r=document.createRange();r.selectNodeContents(el);const selection=getSelection();selection.removeAllRanges();selection.addRange(r);});await page.getByRole('button',{name:'加入侧边聊天',exact:true}).click();
   await page.locator('#lesson-ai-input').fill('切换后保留的草稿');
-  assert.equal(await page.locator('#lesson-ai-mode option[value="harness"]').innerText(),'Codex');assert.equal(await page.locator('#lesson-ai-mode option[value="api"]').innerText(),'DeepSeek-V4.1-Flash');
-  await page.locator('#lesson-ai-mode').selectOption('harness');await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===0&&!document.querySelector('#lesson-ai-mode').disabled);
-  assert.equal(await page.locator('#lesson-ai-reset').isVisible(),false);
+  assert.equal(await page.locator('#lesson-ai-mode option[value="chatgpt"]').innerText(),'ChatGPT 订阅 · 未配置');assert.equal(await page.locator('#lesson-ai-mode option[value="api"]').innerText(),'DeepSeek-V4.1-Flash');
+  await page.locator('#lesson-ai-mode').selectOption('chatgpt');await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===0&&!document.querySelector('#lesson-ai-mode').disabled);
+  assert.equal(await page.locator('#lesson-ai-reset').isVisible(),true);
   await page.locator('#lesson-ai-mode').selectOption('api');await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===5&&!document.querySelector('#lesson-ai-mode').disabled);
   assert.equal(await page.locator('#lesson-ai-input').inputValue(),'切换后保留的草稿');assert.equal(await page.locator('.fragment-chip').count(),1);
   assert.equal((await page.evaluate(()=>window.study.getAISettings())).mode,'api');await page.screenshot({path:path.join(root,'.tmp','chat-mode-switch.png')});
@@ -66,27 +66,22 @@ async function main(){
   await page.locator('#lesson-ai-reset').click();await page.locator('#lesson-ai-status').filter({hasText:'上下文已清除'}).waitFor();
   assert.equal(await page.locator('#lesson-ai-input').inputValue(),'切换后保留的草稿');assert.equal(await page.locator('.fragment-chip').count(),1);assert.equal(await page.locator('.lesson-ai-message').count(),countBefore);
   assert(!(await page.locator('#lesson-ai-compact').getAttribute('title')).includes('压缩摘要'));
-  await page.locator('#lesson-ai-clear').click();await page.locator('#lesson-ai-input').fill('清除之后重新提问');await page.locator('#lesson-ai-send').click();await page.waitForFunction(()=>document.querySelector('#lesson-ai-send').textContent==='发送');
+  await page.locator('#lesson-ai-clear').click();await page.locator('#lesson-ai-input').fill('清除之后重新提问');await page.locator('#lesson-ai-send').click();await page.waitForFunction(()=>!document.querySelector('#lesson-ai-input').disabled);
   assert.deepEqual(requests.at(-1).body.messages.map(x=>x.role),['system','user']);assert(requests.at(-1).body.messages[1].content.includes('清除之后重新提问'));
   await page.screenshot({path:path.join(root,'.tmp','lesson-context-reset.png')});
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'收起侧边栏'}).click();await page.locator('.sidebar').waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'关闭 AI 问答'}).click();await page.getByRole('button',{name:'收起侧边栏'}).click();await page.locator('.sidebar').waitFor({state:'hidden'});
   await page.screenshot({path:path.join(root,'.tmp','sidebar-collapsed.png')});
   await app.close();app=null;page=await launch();
   assert.equal(await page.locator('.sidebar').isVisible(),false);await page.getByRole('button',{name:'展开侧边栏'}).click();
-  await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===5);
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#api-url').waitFor();
-  await page.locator('[name="ai-mode"][value="harness"]').check();await page.locator('#harness-kind').selectOption('http');await page.locator('#harness-name').fill('OpenCode');await page.locator('#harness-url').fill(base+'/agent');await page.locator('#harness-session').fill('test-session');await page.locator('#harness-token').fill('test-harness-token');await page.locator('#save-settings').click();await page.getByText('已保存，当前使用 OpenCode。',{exact:true}).waitFor();
-  const config=await page.evaluate(()=>window.study.getAISettings());assert(config.api.hasKey&&config.harness.hasToken);assert.equal(config.api.model,'deepseek-flash');assert.equal(config.api.systemPrompt,'测试自定义：用简洁中文解释，数学严谨。');
-  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'问 AI',exact:true}).click();
-  await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===0&&!document.querySelector('#lesson-ai-send').disabled);
-  await page.locator('#lesson-ai-input').fill('代理问题');await page.locator('#lesson-ai-send').click();await page.getByText('Harness 已回复',{exact:true}).waitFor();
-  const last=requests.at(-1);assert.equal(last.auth,'Bearer test-harness-token');assert.equal(last.body.sessionId,'test-session');assert.equal(last.body.history.length,0);assert(last.body.message.includes('代理问题'));
-  const keyCheck=fs.readFileSync(path.join(data,'ai-settings.json'),'utf8');assert(!keyCheck.includes('test-api-secret')&&!keyCheck.includes('test-harness-token'));
-  assert.equal(await page.locator('#lesson-ai-mode option[value="harness"]').innerText(),'OpenCode');await page.locator('#lesson-ai-mode').selectOption('api');await page.waitForFunction(()=>!document.querySelector('#lesson-ai-mode').disabled);
+  await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'AI 问答',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.lesson-ai-message').length===5);
+  await page.getByRole('button',{name:'关闭 AI 问答'}).click();await page.getByRole('button',{name:'设置',exact:true}).click();await page.locator('#api-url').waitFor();
+  const config=await page.evaluate(()=>window.study.getAISettings());assert(config.api.hasKey);assert.equal(config.api.model,'deepseek-flash');assert.equal(config.api.systemPrompt,'测试自定义：用简洁中文解释，数学严谨。');
+  assert(!fs.readFileSync(path.join(data,'ai-settings.json'),'utf8').includes('test-api-secret'));
+  await page.locator('#settings-back').click();await page.getByRole('button',{name:'开始学习'}).click();await page.getByRole('button',{name:'AI 问答',exact:true}).click();
   // This section tests the external-writer overlay; the built-in iframe is covered by writer-layout-smoke.
   await app.evaluate(({shell})=>{shell.openExternal=async()=>{};});
   await page.evaluate(()=>window.study.saveWritingSettings({type:'onenote',url:'onenote:https://example.com/test'}));
-  await page.getByRole('button',{name:'关闭提问'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
+  await page.getByRole('button',{name:'关闭 AI 问答'}).click();await page.getByRole('button',{name:'完成，开始做题'}).click();
   let overlay;for(const p of app.windows())if(await p.title()==='题目悬浮窗')overlay=p;
   overlay.on('pageerror',e=>errors.push(e.message));
   await overlay.locator('#exercise-ball').waitFor({state:'visible'});assert.equal(await overlay.locator('#capture').isVisible(),false);await overlay.screenshot({path:path.join(root,'.tmp','external-exercise-ball.png')});
@@ -100,10 +95,10 @@ async function main(){
   async function capture(chat){const pending=app.waitForEvent('window',{predicate:async p=>{await p.waitForLoadState();return await p.title()==='框选截图';}});await overlay.locator('#capture').click();const cap=await pending;await cap.getByText(chat?'框选要向 AI 提问的内容':'框选需要提交的作答区域').waitFor();await cap.evaluate(()=>window.study.commitCapture({x:100,y:150,width:140,height:90})).catch(e=>{if(!cap.isClosed())throw e;});}
   await capture(true);await overlay.locator('.chat-attachment').waitFor();const image=await overlay.locator('.chat-attachment img').getAttribute('src');
   assert.equal(await overlay.locator('#chat-settings').count(),0);
-  const selector=await overlay.locator('#chat-ai-mode').boundingBox(),composer=await overlay.locator('#chat-input').boundingBox();assert(selector.y<composer.y);assert(selector.x<60);
+  const selector=await overlay.locator('#chat-ai-mode').boundingBox(),composer=await overlay.locator('#chat-input').boundingBox();assert(selector.y>composer.y);assert(selector.x<60);
   assert.equal(await overlay.locator('.chat-attachment').count(),1);
-  await overlay.locator('#chat-input').fill('待发送截图');await overlay.locator('#chat-ai-mode').selectOption('harness');await overlay.waitForFunction(()=>!document.querySelector('#chat-ai-mode').disabled);
-  assert.equal(await overlay.locator('#chat-reset').count(),0);
+  await overlay.locator('#chat-input').fill('待发送截图');await overlay.locator('#chat-ai-mode').selectOption('chatgpt');await overlay.waitForFunction(()=>!document.querySelector('#chat-ai-mode').disabled);
+  assert.equal(await overlay.locator('#chat-reset').count(),1);
   await overlay.locator('#chat-ai-mode').selectOption('api');await overlay.waitForFunction(()=>!document.querySelector('#chat-ai-mode').disabled);
   assert.equal(await overlay.locator('.chat-attachment').count(),1);assert.equal(await overlay.locator('#chat-input').inputValue(),'待发送截图');
   await overlay.screenshot({path:path.join(root,'.tmp','overlay-mode-switch.png')});
@@ -125,7 +120,7 @@ async function main(){
   await page.locator('[name="grading-mode"][value="ai"]').check();assert.equal(await page.locator('#grading-thread').count(),0);await page.getByRole('button',{name:'开始 AI 批改'}).click();await page.getByText('批改结果已返回并保存。AI 评分仅供参考，请核对。',{exact:true}).waitFor();
   const grading=requests.at(-1).body.messages.at(-1).content;assert(grading[0].text.includes('题目评分，指出问题，语言精简。'));assert(grading[0].text.includes('参考结论'));assert(grading[0].text.includes('第01题-作答.png'));assert(grading[1].text.includes('第01题-作答.png'));assert(grading[2].image_url.url.startsWith('data:image/png;base64,'));
   assert.deepEqual(errors,[]);
-  console.log('Settings/history passed: DeepSeek template and model ID, Harness names, mode switching preserves credentials/drafts/fragments/images, API/Harness routing, five-message history, restart, sidebar toggle, screenshots, grading, context compression preserves history/drafts/images and supplies summary on the next request; system prompt from first request and API clear removes old context while retaining local history and pending inputs.');
+  console.log('Settings/history passed: DeepSeek template and model ID, subscription option, mode switching preserves credentials/drafts/fragments/images, API routing, five-message history, restart, sidebar toggle, screenshots, grading, context compression preserves history/drafts/images and supplies summary on the next request; system prompt from first request and API clear removes old context while retaining local history and pending inputs.');
  }finally{if(app)await app.close();await new Promise(r=>server.close(r));}
 }
 main().catch(e=>{console.error(e);process.exitCode=1;});

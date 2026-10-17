@@ -17,7 +17,13 @@
     });
     let extent;
     if(raw.extent){const {top,bottom,right}=raw.extent;if(!finite(top)||!finite(bottom)||!finite(right)||bottom<=top||right<=0)throw new Error('画布范围无效。');extent={top,bottom,right};}
-    return {version:2,...(extent?{extent}:{}),file:{width:file.width,left:file.left,gap:file.gap},viewport:{x:viewport.x,y:viewport.y},strokes};
+    if(!Array.isArray(raw.texts??[])||(raw.texts?.length||0)>500)throw new Error('文字框数量无效。');
+    let textLength=0;const texts=(raw.texts||[]).map(t=>{
+      if(!t||typeof t.id!=='string'||t.id.length>80||typeof t.text!=='string'||t.text.length>50000||!finite(t.x)||!finite(t.y)||!finite(t.width)||t.width<60||t.width>1600||!finite(t.size)||t.size<12||t.size>96||!/^#[0-9a-f]{6}$/i.test(t.color))throw new Error('画布文字格式无效。');
+      textLength+=t.text.length;if(textLength>500000)throw new Error('画布文字过多。');
+      return {id:t.id,text:t.text,x:t.x,y:t.y,width:t.width,size:t.size,color:t.color};
+    });
+    return {version:2,...(extent?{extent}:{}),file:{width:file.width,left:file.left,gap:file.gap},viewport:{x:viewport.x,y:viewport.y},strokes,texts};
   }
   function rect(file,index){return {x:file.left,y:index*(file.width*1.4+file.gap),width:file.width,height:file.width*1.4};}
   function worldPoint(point,stroke,file){if(stroke.anchor==null)return point;const r=rect(file,stroke.anchor),scale=file.width/1000;return {x:r.x+point.x*scale,y:r.y+point.y*scale,p:point.p};}

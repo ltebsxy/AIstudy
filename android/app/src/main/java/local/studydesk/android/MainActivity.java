@@ -29,6 +29,8 @@ public final class MainActivity extends Activity {
         web.setOnApplyWindowInsetsListener((view,insets)->{view.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         web.requestApplyInsets();WebSettings settings=web.getSettings();settings.setJavaScriptEnabled(true);settings.setDomStorageEnabled(false);settings.setAllowFileAccess(false);settings.setAllowContentAccess(false);settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);settings.setMediaPlaybackRequiresUserGesture(true);
         web.addJavascriptInterface(new Bridge(),"AndroidStudy");
+        // Native prompt/confirm dialogs are needed by folder management and PDF passwords.
+        web.setWebChromeClient(new WebChromeClient());
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView view,WebResourceRequest request){return !local(request.getUrl());}
             @Override public WebResourceResponse shouldInterceptRequest(WebView view,WebResourceRequest request){return resource(request.getUrl());}
@@ -52,14 +54,14 @@ public final class MainActivity extends Activity {
         }catch(Exception e){return new WebResourceResponse("text/plain","UTF-8",404,"Not Found",Collections.emptyMap(),new ByteArrayInputStream("资源无法读取".getBytes(StandardCharsets.UTF_8)));}
     }
     void script(String code){runOnUiThread(()->{if(web!=null)web.evaluateJavascript(code,null);});}
-    void appearance(String theme){runOnUiThread(()->{boolean dark=theme.equals("dark");int color=android.graphics.Color.parseColor(dark?"#171C19":"#F5F6F3");if(web!=null)web.setBackgroundColor(color);getWindow().setStatusBarColor(color);getWindow().setNavigationBarColor(color);int flags=getWindow().getDecorView().getSystemUiVisibility(),mask=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;getWindow().getDecorView().setSystemUiVisibility(dark?flags&~mask:flags|mask);});}
+    void appearance(String theme){runOnUiThread(()->{boolean dark=theme.equals("dark");int page=android.graphics.Color.parseColor(dark?"#181B1A":"#F6F7F4"),bar=android.graphics.Color.parseColor(dark?"#222725":"#FFFFFF");if(web!=null)web.setBackgroundColor(page);getWindow().setStatusBarColor(bar);getWindow().setNavigationBarColor(bar);int flags=getWindow().getDecorView().getSystemUiVisibility(),mask=View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR|View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;getWindow().getDecorView().setSystemUiVisibility(dark?flags&~mask:flags|mask);});}
     void result(String id,Object value,String error){script("window.nativeResult("+JSONObject.quote(id)+","+(value==null?"null":value.toString())+","+(error==null?"null":JSONObject.quote(error))+")");}
     void event(String name,Object value){script("window.nativeEvent("+JSONObject.quote(name)+","+value+")");}
     static JSONObject object(String name,Object value){JSONObject data=new JSONObject();try{data.put(name,value);}catch(JSONException ignored){}return data;}
     class Bridge {
         @JavascriptInterface public void request(String id,String op,String raw){
             if(raw.length()>24*1024*1024){result(id,null,"保存内容过大");return;}
-            (op.equals("chat")?network:io).execute(()->{
+            (op.equals("translate")?network:io).execute(()->{
                 try{
                     JSONObject p=new JSONObject(raw);Object result;
                     switch(op){
@@ -70,16 +72,16 @@ public final class MainActivity extends Activity {
                         case "cleanup":store.prune();result=new JSONObject().put("ok",true);break;
                         case "aiConfig":result=ai.config();break;
                         case "saveAi":ai.configure(p);result=ai.config();break;
-                        case "chat":result=JSONObject.quote(ai.chat(p));break;
+                        case "translate":result=JSONObject.quote(ai.translate(p));break;
                         case "pick":
-                            if(importBusy)throw new IOException("正在导入，请稍候");importMode=p.getString("mode");if(!importMode.equals("documents")&&!importMode.equals("courses"))throw new IOException("无效模式");importFolder=p.optString("folder");importTree=p.optBoolean("tree");importBusy=true;runOnUiThread(()->pick());result=new JSONObject().put("ok",true);break;
+                            if(importBusy)throw new IOException("正在导入，请稍候");importMode=p.getString("mode");if(!importMode.equals("documents"))throw new IOException("无效模式");importFolder=p.optString("folder");importTree=p.optBoolean("tree");importBusy=true;runOnUiThread(()->pick());result=new JSONObject().put("ok",true);break;
                         case "systemTheme":result=JSONObject.quote((getResources().getConfiguration().uiMode&Configuration.UI_MODE_NIGHT_MASK)==Configuration.UI_MODE_NIGHT_YES?"dark":"light");break;
                         case "appearance":appearance(p.optString("theme"));result=new JSONObject().put("ok",true);break;
                         case "exit":result=new JSONObject().put("ok",true);runOnUiThread(()->finish());break;
                         default:throw new IOException("不支持的操作");
                     }
                     result(id,result,null);
-                }catch(Exception e){String message=op.equals("chat")&&!(e instanceof IOException)?"AI 回复格式无效或密钥不可用，请重新配置":e.getMessage();result(id,null,message==null?"操作失败":message);}
+                }catch(Exception e){String message=op.equals("translate")&&!(e instanceof IOException)?"AI 回复格式无效或密钥不可用，请重新配置":e.getMessage();result(id,null,message==null?"操作失败":message);}
             });
         }
     }
@@ -87,7 +89,7 @@ public final class MainActivity extends Activity {
         try{
             Intent intent=new Intent(importTree?Intent.ACTION_OPEN_DOCUMENT_TREE:Intent.ACTION_OPEN_DOCUMENT);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION|Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-            if(!importTree){intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");intent.putExtra(Intent.EXTRA_MIME_TYPES,importMode.equals("courses")?new String[]{"application/json","text/plain","application/octet-stream"}:new String[]{"text/*","application/pdf","image/*","application/octet-stream"});}
+            if(!importTree){intent.addCategory(Intent.CATEGORY_OPENABLE);intent.setType("*/*");intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/*","application/pdf","application/octet-stream"});}
             String last=store.state().optString("lastImport"+importMode);if(!last.isEmpty())intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI,Uri.parse(last));
             startActivityForResult(intent,42);
         }catch(Exception e){importBusy=false;event("import",object("error","系统文件选择器不可用"));}

@@ -1,0 +1,1 @@
+.lesson-selection-action{border:1px solid var(--border,#d6e3dc);border-radius:8px;padding:8px 12px;background:var(--surface,#fff);color:var(--text,#1c615b);font:600 12px "Microsoft YaHei UI",sans-serif;box-shadow:0 4px 18px #23493824;cursor:pointer}.lesson-selection-action:hover{background:var(--hover,#e9f2ee)}.lesson-selection-action[hidden]{display:none}

@@ -10,7 +10,7 @@ test('nested folders isolate modes, reject cycles and retain separate locations 
   lib.assign({kind:'course',id:'course',folderId:c},['course']);
   assert.throws(()=>lib.assign({kind:'course',id:'course',folderId:r},['course']),/不属于/);
   lib.select({mode:'study',folderId:c,layout:'list'});lib.select({mode:'reading',folderId:r});lib.select({mode:'study'});
-  const data=new Library(lib.root).read();assert.deepEqual(data.views,{study:{folderId:c,layout:'list'},reading:{folderId:r,layout:'cards'}});
+  const data=new Library(lib.root).read();assert.deepEqual(data.views,{study:{folderId:c,layout:'list'},reading:{folderId:r,layout:'cards'},knowledge:{folderId:'',layout:'cards'}});
   assert.throws(()=>lib.removeFolder({id:c,mode:'study'},['course']),/先移出/);
   lib.assign({kind:'course',id:'course'},['course']);lib.removeFolder({id:c,mode:'study'},['course']);assert.equal(lib.read().views.study.folderId,b);
   lib.folder({id:b,name:'B2',mode:'study',parentId:''});assert.equal(lib.read().folders.find(x=>x.id===b).parentId,'');
@@ -18,7 +18,7 @@ test('nested folders isolate modes, reject cycles and retain separate locations 
 });
 test('v1 migration backs up metadata and preserves contents in two independent folder trees',()=>{
   const lib=setup(),old={version:1,books:[{id:'book',name:'数学'}],types:[{id:'type',bookId:'book',name:'练习'}],courses:{c:{bookId:'book',typeId:'type'}},documents:[{id:'pdf-id',name:'example.pdf',bookId:'book',typeId:'type',relativeFile:'documents/11111111-1111-1111-1111-111111111111.pdf'}],selection:{mode:'reading',bookId:'book',typeId:'type'}};
-  fs.writeFileSync(lib.file,JSON.stringify(old));const data=lib.read();assert.equal(data.version,2);assert.equal(data.folders.length,4);
+  fs.writeFileSync(lib.file,JSON.stringify(old));const data=lib.read();assert.equal(data.version,3);assert.equal(data.folders.length,4);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(lib.root,'library-v1.backup.json'))),old);
   assert.equal(data.documents[0].id,'pdf-id');assert.equal(data.documents[0].relativeFile,old.documents[0].relativeFile);
   const study=data.folders.find(x=>x.mode==='study'&&x.name==='练习'),reading=data.folders.find(x=>x.mode==='reading'&&x.name==='练习');

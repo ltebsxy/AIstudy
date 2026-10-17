@@ -1,7 +1,7 @@
 window.WriterQuestion=(()=>{
   const $=id=>document.getElementById(id);
-  let course=null,index=0,values={},saveChain=Promise.resolve(),saveError=null,awaitingProgress=false;
-  function load(next){course=next;index=0;values={};saveChain=Promise.resolve();saveError=null;awaitingProgress=true;render();}
+  let course=null,index=0,values={},saveChain=Promise.resolve(),saveError=null,awaitingProgress=false,unsaved=new Map();
+  function load(next){unsaved.clear();course=next;index=0;values={};saveChain=Promise.resolve();saveError=null;awaitingProgress=true;render();}
   function render(){
     const root=$('canvas-question'),q=course?.questions[index];root.hidden=!q||course.sessionMode==='reading';if(root.hidden)return;
     $('question-number').textContent=`题目 ${index+1} / ${course.questions.length}`;
@@ -30,11 +30,11 @@ window.WriterQuestion=(()=>{
     }
   }
   function queue(value){
-    const savedIndex=index,sessionId=course.sessionId;values[index]=value;
-    saveChain=saveChain.then(()=>window.study.saveResponse({index:savedIndex,value,sessionId})).then(()=>{saveError=null;if(index===savedIndex)$('response-status').textContent='';},e=>{saveError=e;if(index===savedIndex)$('response-status').textContent=e.message;});
+    const savedIndex=index,sessionId=course.sessionId;values[index]=value;const request={index:savedIndex,value,sessionId};unsaved.set(savedIndex,request);
+    saveChain=saveChain.then(()=>window.study.saveResponse(request)).then(()=>{if(unsaved.get(savedIndex)===request)unsaved.delete(savedIndex);saveError=null;if(index===savedIndex)$('response-status').textContent='';},e=>{saveError=e;if(index===savedIndex)$('response-status').textContent=e.message;});
   }
   function progress(p){values={...(p.responses||{}),...values};if(index!==p.index||awaitingProgress){index=p.index;awaitingProgress=false;render();}}
-  async function flush(){await saveChain;if(saveError)throw saveError;}
+  async function flush(){await saveChain;for(const [key,request]of unsaved){await window.study.saveResponse(request);if(unsaved.get(key)===request)unsaved.delete(key);}saveError=null;}
   function position(viewport){$('canvas-question').style.transform=`translate(${-viewport.x}px,${-viewport.y}px)`;}
   return {load,progress,flush,position};
 })();

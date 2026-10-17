@@ -10,7 +10,7 @@
   function words(run,measure){
     const full=run.context??run.text,offset=run.offset||0;
     const measured=measure(run.text)||1,scale=run.width==null?1:run.width/measured;
-    return [...run.text.matchAll(/[A-Za-z]+(?:['’\u2010-\u2013-][A-Za-z]+)*/g)].map(match=>({
+    return [...run.text.matchAll(run.allText?/[A-Za-z]+(?:['’\u2010-\u2013-][A-Za-z]+)*|[^\s]/gu:/[A-Za-z]+(?:['’\u2010-\u2013-][A-Za-z]+)*/g)].map(match=>({
       word:match[0].replaceAll('’',"'").replace(/[\u2010-\u2013]/g,'-'),
       source:full,offset:offset+match.index,length:match[0].length,
       context:sentence(full,offset+match.index,match[0].length),

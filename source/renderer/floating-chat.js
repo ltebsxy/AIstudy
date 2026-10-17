@@ -3,11 +3,11 @@ function setupFloatingChat(panel) {
   let box;
   try { box = JSON.parse(localStorage.getItem(key)); } catch {}
   if (!box || !['left','top','width','height'].every(k=>Number.isFinite(box[k]))) {
-    box = { left: innerWidth - 384, top: 24, width: 360, height: 640 };
+    box = { left: innerWidth - 454, top: 24, width: 430, height: 560 };
   }
   function place() {
-    const width = Math.max(280, Math.min(box.width, innerWidth - 24));
-    const height = Math.max(340, Math.min(box.height, innerHeight - 24));
+    const width = Math.max(Math.min(320,innerWidth-24), Math.min(box.width, innerWidth - 24));
+    const height = Math.max(Math.min(360,innerHeight-24), Math.min(box.height, innerHeight - 24));
     box = { width, height, left: Math.max(12,Math.min(box.left,innerWidth-width-12)), top:Math.max(12,Math.min(box.top,innerHeight-height-12)) };
     Object.assign(panel.style,{left:`${box.left}px`,top:`${box.top}px`,width:`${width}px`,height:`${height}px`});
   }

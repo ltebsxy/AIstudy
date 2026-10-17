@@ -1,0 +1,54 @@
+/* SPDX-License-Identifier: GPL-3.0-only */
+[hidden] { display: none !important; }
+:root {
+  --page: var(--ui-page); --surface: var(--ui-surface); --raised: var(--ui-raised);
+  --hover: var(--ui-hover); --selected: var(--ui-selected); --text: var(--ui-text);
+  --muted: var(--ui-muted); --border: var(--ui-border); --accent: var(--ui-accent);
+  --accent-bg: var(--ui-accent-bg); --primary: var(--ui-primary); --primary-text: var(--ui-primary-text);
+  --input-bg: var(--ui-input);
+  font-family: var(--ui-font); color: var(--ui-text);
+}
+.shell { background: var(--ui-page); color: var(--ui-text); }
+:is(.sidebar,.course-card,.editor-card,.lesson-card,.submission-card,.folder-card,.library-table-wrap,.library-dialog,.note-block,.popover) {
+  background: var(--ui-surface); color: var(--ui-text); border-color: var(--ui-border); border-radius: var(--ui-panel-radius);
+}
+.sidebar { border-radius: 0; }
+:is(.editor-card,.lesson-card,.submission-card) { padding: 24px; }
+:is(.shell .toolbar,.note-toolbar,.programming-toolbar,.course-note-tools,.editor-actions,.submit-actions) { gap: 8px; }
+:is(.shell .toolbar,.note-toolbar,.course-note-tools) { flex-wrap: wrap; }
+.shell .toolbar { align-items: center; margin-bottom: 24px; }
+:is(.btn,.footer-button,.nav-button,.compact-button,.library-dialog button,.popover button) {
+  min-height: 36px; border-radius: var(--ui-radius); font-family: var(--ui-font); font-size: 12px;
+  transition: background .12s ease, border-color .12s ease; box-shadow: none;
+}
+.btn:hover { transform: none; }
+:is(.btn-plain,.footer-button,.nav-button,.compact-button,.library-dialog button,.popover button) {
+  background: var(--ui-surface); color: var(--ui-text); border: 1px solid var(--ui-border);
+}
+:is(.btn-plain,.footer-button,.nav-button,.compact-button,.library-dialog button,.popover button):hover:not(:disabled) { background: var(--ui-hover); }
+:is(.btn-primary,.footer-button.finish,.submit-button) { background: var(--ui-primary); color: var(--ui-primary-text); border-color: var(--ui-primary); }
+:is(.btn-primary,.footer-button.finish,.submit-button):hover:not(:disabled) { background: var(--ui-primary); filter: brightness(.95); }
+.btn-soft { background: var(--ui-accent-bg); color: var(--ui-accent); }
+:is(.nav-item.active,.library-modes .selected,.library-layout button[aria-pressed=true]) { background: var(--ui-selected); color: var(--ui-text); }
+:is(.field input,.field textarea,.field select,.settings-section select,.course-note-tools select,.note-input,.library-dialog input,.library-dialog select) {
+  background: var(--ui-input); color: var(--ui-text); border-color: var(--ui-border); border-radius: var(--ui-radius); font-family: var(--ui-font);
+}
+:is(button,input,select,textarea):focus-visible { outline: 2px solid var(--ui-accent); outline-offset: 2px; }
+:is(.subtitle,.back,.course-card p,.library-storage,.reader-progress,.note-toolbar [role=status]) { color: var(--ui-muted); }
+.reader-paging .btn { background: var(--ui-surface); color: var(--ui-text); border: 1px solid var(--ui-border); }
+.reader-paging .btn:disabled { background: var(--ui-surface); color: var(--ui-muted); opacity: .45; }
+.note-block header { align-items: center; flex-wrap: wrap; }
+.note-toolbar [role=status] { overflow-wrap: anywhere; }
+@media (max-width: 700px) {
+  .main { padding: 24px 18px; }
+  :is(.editor-card,.lesson-card,.submission-card) { padding: 18px; }
+  .toolbar>div { min-width: 0; }
+  .course-note-tools select { min-width: 0; flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) { .btn { transition: none; } }
+
+.library-action-menu { position: fixed; inset: auto; margin: 0; padding: 5px; min-width: 132px; background: var(--ui-surface); color: var(--ui-text); border: 1px solid var(--ui-border); border-radius: var(--ui-radius); box-shadow: var(--ui-shadow); }
+.library-action-menu:popover-open { display: flex; flex-direction: column; gap: 2px; }
+.library-action-menu button { border: 0; border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 13px; text-align: left; padding: 10px 14px; cursor: pointer; white-space: nowrap; }
+.library-action-menu button:hover,.library-action-menu button:focus-visible { background: var(--ui-hover); }
+.library-action-menu button:disabled { opacity: .5; cursor: wait; }

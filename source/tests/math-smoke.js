@@ -40,7 +40,7 @@ async function main() {
 \begin{aligned}f(x)&=x^2\\f(2)&=4\end{aligned}
 \]`;
     await app.evaluate(({ipcMain},reply)=>{
-      for(const [name,value] of [['codex:list',[{id:'11111111-1111-1111-1111-111111111111',title:'公式测试'}]],['codex:connection',{mode:'desktop',label:'公式测试'}],['codex:ask',reply]]){ipcMain.removeHandler(name);ipcMain.handle(name,()=>value);}
+      for(const [name,value] of [['ai:ask',reply]]){ipcMain.removeHandler(name);ipcMain.handle(name,()=>value);}
     },reply);
     await overlay.getByRole('button',{name:'AI 聊天'}).click();
     await overlay.locator('#chat-input').fill('测试公式');
@@ -64,7 +64,7 @@ async function main() {
     assert.equal(await teacher.locator('.math-error').count(),0);
     await teacher.evaluate(()=>document.fonts.ready);
     assert(await teacher.evaluate(()=>document.fonts.check('16px KaTeX_Main')));
-    await page.getByRole('button',{name:'新建课程'}).click();
+    await page.locator('#library-new').click();await page.locator('#new-course').click();
     const knowledge=page.locator('#knowledge');await knowledge.fill('公式：');
     await page.locator('.math-editor').first().getByRole('button',{name:'分式',exact:true}).click();
     await page.locator('.math-preview .katex').waitFor();

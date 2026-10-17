@@ -15,7 +15,6 @@ async function main(){
     const errors=[];page.on('pageerror',e=>errors.push(e.message));overlay.on('pageerror',e=>errors.push(e.message));
     await app.evaluate(({ipcMain,shell})=>{
       shell.openPath=async()=>'';
-      ipcMain.removeHandler('codex:list');ipcMain.handle('codex:list',()=>[{id:'11111111-1111-1111-1111-111111111111',title:'学习测试'}]);
       ipcMain.removeHandler('lesson:ask');ipcMain.handle('lesson:ask',(_event,input)=>{globalThis.__lessonInput=input;return '定义域是允许输入的集合，例如 $x\\ge0$。';});
     });
     await page.getByRole('button',{name:'开始学习'}).click();

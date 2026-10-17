@@ -45,13 +45,13 @@ final class AiClient {
     void configure(JSONObject input) throws Exception {
         endpoint(input.getString("endpoint"));String model=input.getString("model").trim();if(model.isEmpty()||model.length()>200)throw new IOException("请填写实际模型 ID");
         if(input.has("key"))saveSecret(input.getString("key"));
-        store.note("ai-config",new JSONObject().put("endpoint",input.getString("endpoint")).put("model",model).put("prompt",input.optString("prompt","自然友好，语言精简，数学严谨，公式使用 LaTeX。")));
+        store.note("ai-config",new JSONObject().put("endpoint",input.getString("endpoint")).put("model",model).put("prompt",input.optString("prompt","简要给出英语单词或短语的词性和中文释义。")));
     }
-    String chat(JSONObject input) throws Exception {
-        JSONObject config=config();String token=secret();if(token.isEmpty())throw new IOException("请先在 AI 设置中配置 API Key");
-        JSONArray messages=input.getJSONArray("messages");if(messages.length()<1||messages.length()>40)throw new IOException("上下文过长，请清除上下文");
-        JSONArray clean=new JSONArray().put(new JSONObject().put("role","system").put("content",config.optString("prompt")));
-        for(int i=0;i<messages.length();i++){JSONObject m=messages.getJSONObject(i);String role=m.getString("role");if(!role.equals("user")&&!role.equals("assistant"))throw new IOException("消息类型无效");Object content=m.get("content");if(!(content instanceof String||content instanceof JSONArray))throw new IOException("消息内容无效");clean.put(new JSONObject().put("role",role).put("content",content));}
+    String translate(JSONObject input) throws Exception {
+        String text=input.getString("text").trim();if(text.isEmpty()||text.length()>500)throw new IOException("请选择不超过 500 字的单词或短语");
+        JSONObject config=config();String token=secret();if(token.isEmpty())throw new IOException("请先在 AI翻译设置中配置 API Key");
+        JSONArray clean=new JSONArray().put(new JSONObject().put("role","system").put("content",config.optString("prompt","简要给出英语单词或短语的词性和中文释义。")));
+        clean.put(new JSONObject().put("role","user").put("content","简要给出以下词语的词性和中文释义，只翻译所给内容：\n"+text));
         byte[] body=new JSONObject().put("model",config.getString("model")).put("messages",clean).put("stream",false).toString().getBytes(StandardCharsets.UTF_8);
         if(body.length>12*1024*1024)throw new IOException("请求内容过大");
         HttpURLConnection conn=(HttpURLConnection)endpoint(config.getString("endpoint")).openConnection();

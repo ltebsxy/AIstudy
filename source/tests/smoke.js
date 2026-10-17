@@ -21,7 +21,7 @@ async function main() {
     if (!page) throw new Error(`主窗口未打开：${titled.map((item) => item.title).join(', ')}`);
     await page.getByText('我的学习空间').waitFor();
     await page.screenshot({ path: path.join(screenshots, 'home.png') });
-    await page.getByRole('button', { name: '新建课程' }).first().click();
+    await page.locator('#library-new').click();await page.locator('#new-course').click();
     await page.getByPlaceholder('例如：一元二次方程').fill('函数入门');
     await page.getByPlaceholder('在这里写入这节课需要掌握的知识点').fill('函数描述输入与输出之间的关系。');
     await page.getByPlaceholder('输入题目内容，支持文字与图片').fill('求 f(2)，其中 f(x)=x+3。');
@@ -35,19 +35,14 @@ async function main() {
     await overlay.screenshot({ path: path.join(screenshots, 'overlay.png') });
     assert(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find((win) => win.getTitle() === '题目悬浮窗').isAlwaysOnTop()));
     await app.evaluate(({ ipcMain }) => {
-      ipcMain.removeHandler('codex:list');
-      ipcMain.handle('codex:list', () => [{ id: '11111111-1111-1111-1111-111111111111', title: '学习测试' }]);
-      ipcMain.removeHandler('codex:ask');
-      ipcMain.handle('codex:ask', () => ({ needsDesktop: true }));
-      ipcMain.removeHandler('codex:desktop');
-      ipcMain.handle('codex:desktop', () => '这是返回的学习解答。');
+      ipcMain.removeHandler('ai:ask');
+      ipcMain.handle('ai:ask', () => '这是返回的学习解答。');
     });
     await overlay.getByRole('button', { name: 'AI 聊天' }).click();
     await overlay.locator('#chat-input').waitFor();
     assert.equal(await overlay.locator('.question-text').count(), 0);
     await overlay.getByPlaceholder('输入你的问题…').fill('2+2 等于几？');
     await overlay.getByRole('button', { name: '发送', exact: true }).click();
-    await overlay.getByRole('button', { name: '复制问题并打开 Codex' }).click();
     await overlay.getByText('这是返回的学习解答。').waitFor();
     await overlay.screenshot({ path: path.join(screenshots, 'chat.png') });
     await overlay.getByRole('button', { name: '返回题目' }).click();
@@ -63,7 +58,7 @@ async function main() {
     const files = fs.readdirSync(path.join(temp, folders[0]));
     assert(files.includes('批改材料.html'));
     assert(files.includes('作答文件.pdf'));
-    await page.getByRole('button', { name: '新建课程' }).first().click();
+    await page.locator('#library-new').click();await page.locator('#new-course').click();
     await page.getByPlaceholder('例如：一元二次方程').fill('OneNote 演示');
     await page.getByPlaceholder('在这里写入这节课需要掌握的知识点').fill('第二课知识点');
     await page.getByPlaceholder('输入题目内容，支持文字与图片').fill('第二课题目');
@@ -99,7 +94,7 @@ async function main() {
     const png = fs.readFileSync(path.join(temp, imageFolder, '第01题-作答.png'));
     assert.equal(png.subarray(1, 4).toString(), 'PNG');
     assert(png.readUInt32BE(16) >= 340 && png.readUInt32BE(20) >= 240);
-    await page.getByRole('button', { name: '新建课程' }).first().click();
+    await page.locator('#library-new').click();await page.locator('#new-course').click();
     await page.getByPlaceholder('例如：一元二次方程').fill('自选程序演示');
     await page.getByPlaceholder('在这里写入这节课需要掌握的知识点').fill('第三课知识点');
     await page.getByPlaceholder('输入题目内容，支持文字与图片').fill('第三课题目');

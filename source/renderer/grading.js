@@ -91,8 +91,8 @@ function setupSubmissionGrading(courseId, getAnswer) {
   };
   cancel.onclick = async () => {
     cancel.disabled = true;
-    status.textContent = '正在停止等待；Codex 中的批改任务可能继续运行。';
-    try { await window.study.cancelCodex(); } catch (error) { status.textContent = error.message; cancel.disabled = false; }
+    status.textContent = '正在停止等待…';
+    try { await window.study.cancelAI(); } catch (error) { status.textContent = error.message; cancel.disabled = false; }
   };
   open.onclick = () => window.study.openFolder(reportFolder);
   submit.onclick = async () => {

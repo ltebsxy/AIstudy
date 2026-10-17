@@ -1,6 +1,9 @@
 const embedded=new URLSearchParams(location.search).has('embedded');
 const chatOnly=()=>embedded||reading();
 const content = document.getElementById('content');
+const captureNoteButton=document.createElement('button');captureNoteButton.id='overlay-note-capture';captureNoteButton.textContent='笔记';captureNoteButton.title='截图追加到课程笔记';captureNoteButton.hidden=true;captureNoteButton.style.fontSize='12px';document.querySelector('.dragbar strong').after(captureNoteButton);
+captureNoteButton.onclick=()=>afterResponse(()=>window.study.captureNote(course.id));
+window.study.onCourse(next=>{captureNoteButton.hidden=embedded||next.sessionMode==='reading';});
 let course = null;
 let index = 0;
 let captured = [];
@@ -13,7 +16,7 @@ let mode = 'question';
 let messages = [];
 let busy = false;
 let draft = '';
-let desktopMessage = null;
+
 let attachments = [];
 let connectionLabel = '正在读取 AI 连接…';
 let connectionConfig=null,switchingConnection=false;
@@ -21,7 +24,7 @@ let compacting=false,contextStatus='';
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
 function footer() {
-  if(chatOnly())return '<footer class="footer reading-footer"><select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button class="footer-button" id="capture" '+(busy||attachments.length>=4?'disabled':'')+'>▣ 截图提问</button><button class="footer-button" id="open-writer">✎ 文件与笔记</button></footer>';
+  if(mode==='chat')return '<footer class="chat-footer"><div class="chat-connection-row"><select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select><button class="footer-button" id="capture" '+(busy||attachments.length>=4?'disabled':'')+'>截图提问</button></div>'+(!chatOnly()?'<div class="chat-extra-actions"><button class="footer-button" id="toggle-chat">返回题目</button><button class="footer-button" id="finish" '+(busy?'disabled':'')+'>'+(index===course.questions.length-1?'完成并提交':'完成，下一题')+'</button></div>':'<button id="open-writer" hidden>文件与笔记</button>')+'</footer>';
   return `<footer class="footer"><button class="footer-button" id="capture" ${busy || (mode === 'chat' && attachments.length >= 4) ? 'disabled' : ''}>${mode === 'chat' ? '▣ 截图提问' : '▣ 截图作答'}</button><button class="footer-button" id="toggle-chat">${mode === 'chat' ? '▤ 返回题目' : '✦ AI 聊天'}</button><button class="footer-button finish" id="finish" ${busy ? 'disabled' : ''}>${index === course.questions.length - 1 ? '完成并提交' : '完成，下一题'}</button></footer>`;
 }
 
@@ -46,6 +49,7 @@ function responseMarkup(question) {
   return '';
 }
 function drawQuestion() {
+  document.querySelector('.dragbar strong').textContent='正在练习';document.getElementById('close-ai').hidden=true;
   const question = course.questions[index];
   content.innerHTML = `<div class="body"><div class="course-title">${esc(course.title)}</div><div class="question-count">题目 ${String(index + 1).padStart(2, '0')} / ${String(course.questions.length).padStart(2, '0')}</div><div class="question-scroll"><p class="question-text">${esc(question.text)}</p>${question.image ? `<img class="question-image" src="${question.image}" alt="当前题目图片">` : ''}${responseMarkup(question)}<div id="response-status" role="status"></div></div><div class="page-row"><span class="dots">${index + 1} / ${course.questions.length}</span><div><button class="nav-button" id="prev" ${index === 0 ? 'disabled' : ''}>上一题</button> <button class="nav-button" id="next" ${index === course.questions.length - 1 ? 'disabled' : ''}>下一题</button></div></div>${footer()}</div>`;
   document.getElementById('prev').onclick = () => afterResponse(()=>window.study.navigateQuestion(index - 1));
@@ -61,9 +65,10 @@ function drawQuestion() {
 }
 
 function drawChat() {
-  const older=historyPage.hasMore?`<button class="desktop-continue history-more" ${loadingHistory||busy?'disabled':''}>加载更早消息</button>`:'';
+  document.querySelector('.dragbar strong').textContent='AI 问答';document.getElementById('close-ai').hidden=false;
+  const older=historyPage.hasMore?`<button class="history-more" ${loadingHistory||busy?'disabled':''}>加载更早消息</button>`:'';
   const bubbles = messages.map((message) => `<div class="message ${message.role === 'user' ? 'user' : message.error ? 'error' : 'assistant'}">${esc(message.text)}${(message.images || []).map(image=>`<img class="chat-sent-image" src="${esc(image.image)}" alt="已发送截图">`).join('')}</div>`).join('');
-  content.innerHTML = `<div class="body"><div class="ai-chat-tools">${chatOnly()?'':'<select id="chat-ai-mode" class="ai-mode-select" aria-label="切换 AI 连接" disabled><option>读取连接…</option></select>'}<button id="chat-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">${compacting?'压缩中…':'压缩上下文'}</button>${['api','chatgpt'].includes(connectionConfig?.mode)?'<button id="chat-reset" class="compact-button" title="清除当前对话的历史上下文和摘要；本地聊天记录保留">清除上下文</button>':''}</div><div class="chat-subtitle" role="status"></div><div class="messages" id="messages">${older}${bubbles || (reading()?'<div class="chat-empty">阅读文件，随时提问。<br>截图可将选中的内容加入提问。</div>':`<div class="chat-empty">在这里输入问题，<br>${chatOnly()?'下方':'左上角'}可切换模型。</div>`)}</div>${desktopMessage && !busy ? '<button class="desktop-continue" id="desktop-continue">复制问题并打开 Codex</button>' : ''}${attachments.length ? `<div class="chat-attachments">${attachments.map((item,i)=>`<div class="chat-attachment"><img src="${esc(item.image)}" alt="截图 ${i+1}"><button data-remove-image="${i}" aria-label="移除截图 ${i+1}" ${busy ? 'disabled' : ''}>×</button></div>`).join('')}</div>` : ''}<div class="chat-compose"><textarea id="chat-input" placeholder="输入你的问题…" ${busy ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-compose-actions"><button id="send-message" aria-label="${busy ? '停止等待' : '发送'}" title="${busy ? '停止等待' : '发送'}"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" focusable="false">${busy ? '<rect x="6" y="6" width="12" height="12" rx="2" fill="currentColor"/>' : '<path d="M12 19V5M5 12l7-7 7 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'}</svg></button></div></div>${footer()}</div>`;
+  content.innerHTML = `<div class="body chat-content"><div class="ai-chat-tools chat-tools"><button id="chat-compact" class="compact-button" title="压缩发送的上下文，保留本地聊天记录">${compacting?'压缩中…':'压缩上下文'}</button>${['api','chatgpt'].includes(connectionConfig?.mode)?'<button id="chat-reset" class="compact-button" title="清除当前对话的历史上下文和摘要；本地聊天记录保留">清除上下文</button>':''}</div><div class="chat-subtitle chat-status" role="status"></div><div class="messages chat-messages" id="messages" role="log" aria-label="AI 问答消息">${older}${bubbles || (reading()?'<div class="chat-empty">阅读文件，随时提问。<br>截图可将选中的内容加入提问。</div>':`<div class="chat-empty">在这里输入问题，<br>下方可切换模型。</div>`)}</div>${attachments.length ? `<div class="chat-attachments">${attachments.map((item,i)=>`<div class="chat-attachment"><img src="${esc(item.image)}" alt="截图 ${i+1}"><button data-remove-image="${i}" aria-label="移除截图 ${i+1}" ${busy ? 'disabled' : ''}>×</button></div>`).join('')}</div>` : ''}<div class="chat-compose chat-composer"><textarea aria-label="输入问题" id="chat-input" placeholder="输入你的问题…" ${busy ? 'disabled' : ''}>${esc(draft)}</textarea><div class="ai-compose-actions"><button class="chat-send" id="send-message" aria-label="${busy ? '停止等待' : '发送'}" title="${busy ? '停止等待' : '发送'}">${StudyChat.sendIcon(busy)}</button></div></div>${footer()}</div>`;
   content.querySelectorAll('[data-remove-image]').forEach(button=>button.onclick=()=>{attachments.splice(Number(button.dataset.removeImage),1);drawChat();});
   const compactButton=document.getElementById('chat-compact');
   if(historyPage.summary)compactButton.title='当前上下文摘要（AI 生成，可对照历史核查）：\n'+historyPage.summary.text;
@@ -99,10 +104,9 @@ function drawChat() {
   content.querySelectorAll('.message').forEach((bubble) => StudyMath.render(bubble));
   content.querySelector('.history-more')?.addEventListener('click',()=>loadHistory(false));
   document.getElementById('messages').onscroll=event=>{const top=event.target.scrollTop;if(top<lastScroll&&top<16&&historyPage.hasMore&&!loadingHistory&&!busy)loadHistory(false);lastScroll=top;};
-  document.getElementById('send-message').onclick = () => busy ? window.study.cancelCodex().catch(console.error) : sendMessage();
+  document.getElementById('send-message').onclick = () => busy ? window.study.cancelAI().catch(console.error) : sendMessage();
   document.getElementById('chat-input').oninput = (event) => { draft = event.target.value; };
-  if (document.getElementById('desktop-continue')) document.getElementById('desktop-continue').onclick = continueInDesktop;
-  document.getElementById('chat-input').onkeydown = (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendMessage(); } };
+  document.getElementById('chat-input').onkeydown = (event) => { StudyChat.enterToSend(event,()=>document.getElementById('send-message').click()); };
   document.getElementById('messages').scrollTop = document.getElementById('messages').scrollHeight;lastScroll=document.getElementById('messages').scrollTop;
   document.getElementById('send-message').disabled=loadingHistory||switchingConnection;
   bindFooter();
@@ -122,7 +126,6 @@ async function loadHistory(reset=true){
     const result=await window.study.chatHistory({scope:chatScope(),courseId:course.id,before:reset?undefined:historyPage.before});
     if(generation!==historyGeneration)return;
     messages=reset||result.key!==historyPage.key?result.items:[...result.items,...messages];historyPage=result;
-    desktopMessage=messages.findLast(m=>m.pending)?.pending||null;
     if(mode==='chat'){drawChat();if(!reset){const target=document.getElementById('messages');target.scrollTop=oldTop+target.scrollHeight-oldHeight;lastScroll=target.scrollTop;}}
   }catch(e){contextStatus=e.message;if(mode==='chat')drawChat();}
   finally{if(generation===historyGeneration){loadingHistory=false;const send=document.getElementById('send-message');if(send)send.disabled=switchingConnection;const more=content.querySelector('.history-more');if(more)more.disabled=busy;const compact=document.getElementById('chat-compact');if(compact)compact.disabled=busy||switchingConnection||!connectionConfig;const reset=document.getElementById('chat-reset');if(reset)reset.disabled=busy||switchingConnection;}}
@@ -130,7 +133,7 @@ async function loadHistory(reset=true){
 async function loadConnection(){
   try{const c=await window.study.getAISettings();connectionConfig=c;connectionLabel=StudyAI.label(c);if(mode==='chat')drawChat();await loadHistory(true);}catch(e){contextStatus=e.message;if(mode==='chat')drawChat();}
 }
-window.study.onAISettings(config=>{contextStatus='';connectionConfig=config;connectionLabel=StudyAI.label(config);historyGeneration++;historyPage={hasMore:false,before:null};messages=[];desktopMessage=null;if(mode==='chat')loadConnection();});
+window.study.onAISettings(config=>{contextStatus='';connectionConfig=config;connectionLabel=StudyAI.label(config);historyGeneration++;historyPage={hasMore:false,before:null};messages=[];if(mode==='chat')loadConnection();});
 
 async function sendMessage() {
   if (busy) return;
@@ -142,16 +145,12 @@ async function sendMessage() {
   messages.push({ role: 'user', text, images: sentImages });
   messages.push({ role: 'assistant', text: '正在思考…' });
   draft = '';
-  desktopMessage = null;
+
   busy = true;
   drawChat();
   try {
-    const answer = await window.study.askCodex({ question:text, attachmentIds: sentImages.map(item=>item.id) });
-    if (answer?.needsDesktop) {
-      desktopMessage = answer;
-      messages[messages.length - 1].pending = answer;
-      messages[messages.length - 1].text = '这个任务正在由 Codex 桌面版管理。请点击下方按钮，在打开的任务中粘贴并发送问题；回复完成后会自动显示在这里。';
-    } else messages[messages.length - 1].text = answer;
+    const answer = await window.study.askAI({ question:text, attachmentIds: sentImages.map(item=>item.id) });
+    messages[messages.length - 1].text = answer;
     attachments = [];
   } catch (error) {
     messages[messages.length - 1] = { role: 'assistant', text: error.message || String(error), error: true };
@@ -159,35 +158,7 @@ async function sendMessage() {
   } finally { busy = false; if (mode === 'chat') drawChat(); }
 }
 
-async function continueInDesktop() {
-  if (!desktopMessage || busy) return;
-  busy = true;
-  const pending = desktopMessage;
-  const target=messages.findLast(m=>m.pending===pending)||messages.at(-1);
-  target.text='正在等待 Codex。请在打开的任务中按 Ctrl+V 粘贴问题，再发送。';
-  drawChat();
-  try {
-    target.text = await window.study.continueInCodex(pending);
-    delete target.pending;
-    desktopMessage = messages.findLast(m=>m.pending)?.pending||null;
-  } catch (error) {
-    target.text=error.message||String(error);target.error=true;
-  } finally { busy = false; if (mode === 'chat') drawChat(); }
-}
-
-window.study.onCodexDelta((delta) => {
-  if (!busy || !messages.length) return;
-  const last = messages[messages.length - 1];
-  if (last.text === '正在思考…') last.text = '';
-  last.text += delta;
-  if (mode === 'chat') {
-    const list = document.getElementById('messages');
-    const bubble = list?.lastElementChild;
-    if (bubble?.classList.contains('assistant')) StudyMath.setText(bubble, last.text);
-    if (list) list.scrollTop = list.scrollHeight;
-  }
-});
-window.study.onCodexAnswer((text) => {
+window.study.onAIAnswer((text) => {
   if (!busy || !messages.length) return;
   messages[messages.length - 1].text = text;
   if (mode === 'chat') {
@@ -197,7 +168,7 @@ window.study.onCodexAnswer((text) => {
   }
 });
 window.study.onChatCapture(image=>{attachments.push(image);mode='chat';draw();});
-window.study.onCourse((next) => {contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';desktopMessage=null;course=next;index=0;captured=[];responses={};responseSave=Promise.resolve();responseError=null;mode=chatOnly()?'chat':'question';document.body.classList.toggle('external-exercise',Boolean(next.externalWriter));document.body.classList.toggle('collapsed',Boolean(next.externalWriter));document.getElementById('collapse-exercise').hidden=!next.externalWriter;document.getElementById('close-ai').hidden=!chatOnly();document.querySelector('.dragbar strong').textContent=chatOnly()?'AI 问答':'正在练习';draw();if(chatOnly())loadConnection();});
+window.study.onCourse((next) => {contextStatus='';historyGeneration++;historyPage={hasMore:false,before:null};loadingHistory=false;attachments=[];messages=[];draft='';course=next;index=0;captured=[];responses={};responseSave=Promise.resolve();responseError=null;mode=chatOnly()?'chat':'question';document.body.classList.toggle('external-exercise',Boolean(next.externalWriter));document.body.classList.toggle('collapsed',Boolean(next.externalWriter));document.getElementById('collapse-exercise').hidden=!next.externalWriter;document.getElementById('close-ai').hidden=!chatOnly();document.querySelector('.dragbar strong').textContent=chatOnly()?'AI 问答':'正在练习';draw();if(chatOnly())loadConnection();});
 window.study.onExerciseOverlayExpanded(expanded=>document.body.classList.toggle('collapsed',!expanded));
 const exerciseBall=document.getElementById('exercise-ball');let ballDown=null,ballMoved=false;
 exerciseBall.onpointerdown=e=>{ballDown={x:e.screenX,y:e.screenY};ballMoved=false;exerciseBall.setPointerCapture(e.pointerId);};
@@ -210,4 +181,4 @@ document.getElementById('back-main').onclick = () => afterResponse(()=>window.st
 
 window.study.onOpenChat(()=>{document.getElementById('close-ai').hidden=false;if(!course||mode==='chat')return;afterResponse(async()=>{mode='chat';draw();if(!busy)await loadConnection();});});
 
-document.getElementById('close-ai').onclick=()=>window.study.toggleWriterAI({sessionId:course?.sessionId}).catch(e=>alert(e.message));
+document.getElementById('close-ai').onclick=()=>chatOnly()?window.study.toggleWriterAI({sessionId:course?.sessionId}).catch(e=>alert(e.message)):afterResponse(async()=>{mode='question';draw();});

@@ -16,15 +16,12 @@ async function main(){
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await app.evaluate(({ipcMain,app})=>{
    const id='11111111-1111-1111-1111-111111111111';
-   ipcMain.removeHandler('codex:list');ipcMain.handle('codex:list',()=>[{id,title:'测试任务'}]);
-   ipcMain.removeHandler('codex:preferences');ipcMain.handle('codex:preferences',()=>({codexThreadId:id}));
    globalThis.__sent=[];
    const ask=async(_id,message)=>{globalThis.__sent.push(message);if(message.includes('模拟失败'))throw new Error('模拟失败');return '简短回答 $x^2$';};
-   process.mainModule.require('./lib/desktop-codex').DesktopCodex.prototype.ask=ask;
-   process.mainModule.require('./lib/codex-client').CodexClient.prototype.ask=ask;
+   process.mainModule.require('./lib/ai-service').AIService.prototype.request=ask;
   });
   await page.setViewportSize({width:1920,height:1080});
-  await page.evaluate(()=>window.study.selectCodexThread('11111111-1111-1111-1111-111111111111'));
+  await page.evaluate(()=>window.study.switchAIMode('api'));
   await page.getByRole('button',{name:'开始学习'}).click();
   async function selectText(text){
    await page.locator('.reader-body').evaluate((el,text)=>{

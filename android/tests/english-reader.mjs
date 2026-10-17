@@ -1,0 +1,46 @@
+// Focused English-reader flow; AI is stubbed, no external request or private data.
+import {createRequire} from 'node:module';
+import {mkdir,writeFile,readFile,mkdtemp,rm} from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(import.meta.url)('../../source/node_modules/playwright-core');
+function pdf(){
+ const stream='BT /F1 24 Tf 40 740 Td (Learning with artificial intelligence) Tj ET';
+ const objects=['<< /Type /Catalog /Pages 2 0 R >>','<< /Type /Pages /Kids [3 0 R] /Count 1 >>','<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>','<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`];
+ let output='%PDF-1.4\n',offsets=[0];objects.forEach((object,i)=>{offsets.push(output.length);output+=`${i+1} 0 obj\n${object}\nendobj\n`;});const xref=output.length;output+='xref\n0 6\n0000000000 65535 f \n'+offsets.slice(1).map(n=>String(n).padStart(10,'0')+' 00000 n \n').join('')+`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;return output;
+}
+
+const browser=await chromium.launch({executablePath:process.env.STUDY_CHROME??'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true});
+const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];
+page.on('pageerror',e=>errors.push(e.message));page.setDefaultTimeout(10000);
+const output=path.resolve('android/build/verification'),pack=await mkdtemp(path.join(os.tmpdir(),'study-english-pack-'));await mkdir(output,{recursive:true});
+await page.route('**/bridge.mjs',async route=>{const response=await route.fetch(),body=await response.text();await route.fulfill({response,body:body.replace("case 'saveAi':case 'translate':", "case 'translate':window.testTranslationInput=payload;return Promise.resolve('pron. 她的（AI 测试释义）');case 'saveAi':")});});
+try{
+ await page.goto('http://127.0.0.1:4186');await page.locator('#library').waitFor();
+ // Existing courses and handwriting survive a reader-only upgrade, but cannot be opened.
+ await page.evaluate(async()=>{const {rpc}=await import('./bridge.mjs');const state=await rpc('load');state.courses=[{id:'old-course',title:'Legacy course'}];state.documents.push({id:'old-ink',name:'旧手写笔记',ext:'blank'});await rpc('save',state);await rpc('saveNote',{id:'doc-old-ink',data:{canvas:{strokes:[{legacy:true}]}}});});
+ await page.reload();await page.locator('#library').waitFor();assert.equal(await page.locator('[data-mode],#ink,#ai-open,#new-note,#course-controls').count(),0);assert.equal(await page.locator('.item').count(),0);
+ await mkdir(path.join(pack,'articles'));await writeFile(path.join(pack,'reading-pack.json'),JSON.stringify({version:1,title:'English pack',documents:[{file:'articles/reader.txt',name:'AI reading'}]}));
+ await writeFile(path.join(pack,'articles/reader.txt'),Array(45).fill('Her schoolmate studies artificial intelligence. Learning helps people understand the world.').join('\n\n'));await writeFile(path.join(pack,'vocabulary.txt'),'This companion file must not be imported.');
+ const [chooser]=await Promise.all([page.waitForEvent('filechooser'),page.locator('#import-folder').click()]);await chooser.setFiles(pack);
+ await page.locator('.item .open').filter({hasText:'English pack'}).click();await page.locator('.item .open').filter({hasText:'articles'}).click();assert.equal(await page.locator('.item').count(),1);await page.locator('.item .open').click();
+ const word=page.locator('.word').filter({hasText:/^Her$/}).first(),r=await word.boundingBox();await page.touchscreen.tap(r.x+r.width/2,r.y+r.height/2);assert(await page.locator('#translation').isHidden());await page.waitForTimeout(65);await page.touchscreen.tap(r.x+r.width/2,r.y+r.height/2);await page.locator('#translation-content').getByText('她的, 她',{exact:false}).waitFor();
+ await page.locator('#translate-ai').click();await page.locator('#translation-ai').getByText('pron. 她的（AI 测试释义）').waitFor();assert.deepEqual(await page.evaluate(()=>window.testTranslationInput),{text:'Her'});
+ await page.locator('#add-note').click();await page.locator('#translation-status').getByText('已加入阅读笔记').waitFor();await page.locator('#translation-close').click();await page.locator('#open-notes').click();assert((await page.locator('.reading-note').innerText()).includes('AI 测试释义'));await page.locator('#info-dialog [data-close]').click();
+ // A selected phrase uses the same popup.
+ await page.locator('#content p').first().evaluate(el=>{const range=document.createRange();const words=el.querySelectorAll('.word');range.setStart(words[0].firstChild,0);range.setEnd(words[1].firstChild,10);getSelection().removeAllRanges();getSelection().addRange(range);});
+ await page.locator('#phrase-lookup').click();await page.locator('#translation-title').getByText('Her schoolmate',{exact:true}).waitFor();await page.locator('#translation-close').click();
+ await page.locator('#scroll').evaluate(el=>el.scrollTop=800);await page.waitForTimeout(100);await page.evaluate(()=>window.flushStudy());await page.reload();await page.locator('#reader').waitFor();await page.waitForFunction(()=>document.getElementById('scroll').scrollTop>=790);
+ await page.locator('#settings').click();await page.locator('#theme').selectOption('dark');await page.locator('#font-size').evaluate(el=>el.value='22');await page.locator('#font-size').dispatchEvent('input');await page.locator('#settings-dialog button[value=close]').click();assert.equal(await page.locator('html').getAttribute('data-theme'),'dark');
+ await page.locator('#back').click();await page.locator('#back').click();await page.locator('#back').click();await writeFile(path.join(output,'text-layer.pdf'),pdf());const [pdfChooser]=await Promise.all([page.waitForEvent('filechooser'),page.locator('#import-file').click()]);await pdfChooser.setFiles(path.join(output,'text-layer.pdf'));await page.locator('.item .open').filter({hasText:'text-layer.pdf'}).click();const span=page.locator('.textLayer span').filter({hasText:'Learning'});await span.waitFor();
+ const point=await span.evaluate(el=>{const range=document.createRange();range.setStart(el.firstChild,0);range.setEnd(el.firstChild,8);const r=range.getBoundingClientRect();return {x:r.x+r.width/2,y:r.y+r.height/2};});await page.touchscreen.tap(point.x,point.y);await page.waitForTimeout(65);await page.touchscreen.tap(point.x,point.y);await page.locator('#translation-content').getByText('学习',{exact:false}).first().waitFor();await page.screenshot({path:path.join(output,'english-reader-dark.png')});
+ await page.locator('#translation-close').click();await page.locator('#back').click();await page.locator('.item .more').first().click();page.once('dialog',d=>d.accept());await page.locator('#remove-item').click();await page.locator('#info-dialog').waitFor({state:'hidden'});await page.locator('#open-notes').click();assert((await page.locator('.reading-note').innerText()).includes('AI 测试释义'));
+ const preserved=await page.evaluate(async()=>{const {rpc}=await import('./bridge.mjs');return {state:await rpc('load'),note:await rpc('note',{id:'doc-old-ink'})};});assert.equal(preserved.state.courses[0].id,'old-course');assert(preserved.note.canvas.strokes[0].legacy);assert.deepEqual(errors,[]);
+ // Desktop popup uses the same actions; stub only the transport.
+ const desktop=await context.newPage(),html=await readFile('source/renderer/writer.html','utf8'),aside=html.match(/<aside id="word-popup"[\s\S]*?<\/aside>/)[0];await desktop.route('**/desktop-popup',route=>route.fulfill({contentType:'text/html',body:'<body>'+aside+'</body>'}));await desktop.goto('http://127.0.0.1:4186/desktop-popup');
+ await desktop.evaluate(()=>{window.study={lookupEnglishWord:async()=>({found:true,word:'her',lemma:'her',phonetic:'hə:',senses:[{pos:'pron. 代词',meaning:'她的，她'}]}),translateEnglish:async input=>{window.aiPayload=input;return 'pron. 她的（AI 测试释义）';},addReadingNote:async input=>{window.notePayload=input;return {name:'阅读笔记'};}};});await desktop.addScriptTag({content:await readFile('source/renderer/english-reader.js','utf8')});
+ await desktop.evaluate(()=>EnglishReader.open({sessionId:'session-1',text:'her',clientX:20,clientY:50}));await desktop.locator('#word-ai').click();await desktop.locator('#word-ai-result').getByText('pron. 她的（AI 测试释义）').waitFor();await desktop.locator('#word-note').click();assert((await desktop.evaluate(()=>window.notePayload.text)).includes('她的，她'));assert((await desktop.evaluate(()=>window.notePayload.text)).includes('AI 测试释义'));assert.deepEqual(await desktop.evaluate(()=>window.aiPayload),{sessionId:'session-1',text:'her'});
+ console.log('PASS: English-only UI; pack import; offline double tap/phrase; explicit AI translation/notes; progress/theme; PDF lookup; legacy data preserved; desktop popup actions. AI responses stubbed.');
+}catch(error){await page.screenshot({path:path.join(output,'english-reader-failure.png')});console.error(errors,(await page.locator('body').innerText()).slice(0,1200));throw error;}
+finally{await browser.close();await rm(pack,{recursive:true,force:true});}

@@ -100,7 +100,7 @@ test('account catalog and Responses use only granted account/models, explicit co
   const f=fixture();try{
     const result=await f.connection.login({},f.browser),models=await f.connection.listModels(result.accountId);assert.deepEqual(models.map(m=>m.slug),['m-first','m-second','gpt-6-sol','gpt-6.1-sol']);
     const settings=new AISettings(f.root,f.safe),config=settings.public();config.mode='chatgpt';config.chatgpt={accountId:result.accountId,model:'m-first',systemPrompt:'Be concise.'};settings.save(config);
-    const history=new ChatHistory(path.join(f.root,'chats')),service=new AIService(settings,history,{cancel(){}},{cancel(){}},f.connection),key=settings.key('lesson','course');
+    const history=new ChatHistory(path.join(f.root,'chats')),service=new AIService(settings,history,f.connection),key=settings.key('lesson','course');
     history.append(key,{role:'user',text:'earlier',state:'done'});history.append(key,{role:'assistant',text:'previous answer',state:'done'});
     const updates=[];assert.equal(await service.chat({scope:'lesson',courseId:'course',question:'hello',message:'hello',onUpdate:x=>updates.push(x)}),'Hello');
     const body=f.state.inference[0];assert.deepEqual(Object.keys(body).sort(),['input','instructions','model','store','stream']);assert.equal(body.instructions,'Be concise.');assert.equal(body.input.length,3);assert.equal(body.store,false);assert.equal(body.stream,true);assert.equal(updates.at(-1),'Hello');

@@ -8,8 +8,14 @@
   <link rel="stylesheet" href="writer.css">
   <link rel="stylesheet" href="vendor/katex/katex.min.css">
   <link rel="stylesheet" href="math.css">
+  <link rel="stylesheet" href="notes.css">
+  <link rel="stylesheet" href="note-selection.css">
   <link rel="stylesheet" href="theme.css">
+  <link rel="stylesheet" href="ui-tokens.css">
+  <link rel="stylesheet" href="ui.css">
+  <link rel="stylesheet" href="chat-layout.css">
   <script src="theme.js"></script>
+  <script src="chat-ui.js"></script>
 </head>
 <body>
   <svg class="svg-definitions" aria-hidden="true"><defs>
@@ -27,6 +33,7 @@
     <button id="undo" class="icon-button" title="撤销 · Ctrl+Z" aria-label="撤销"><svg><use href="#i-undo"/></svg></button>
     <button id="redo" class="icon-button" title="重做 · Ctrl+Shift+Z" aria-label="重做"><svg class="mirror"><use href="#i-undo"/></svg></button><i class="separator"></i>
     <button id="hand" class="icon-button" title="拖动画布 · H" aria-label="拖动画布" aria-pressed="false"><svg><use href="#i-hand"/></svg></button>
+    <button id="text-tool" class="icon-button" title="文字 · T：点击文字直接修改，空白处添加文字" aria-label="文字" aria-pressed="false">T</button>
     <button id="eraser" class="icon-button" title="橡皮 · E" aria-label="橡皮" aria-pressed="false"><svg><use href="#i-eraser"/></svg></button><i class="separator"></i>
     <button id="pen" class="pen-button selected" data-pen="#253445" style="--ink:#253445" title="黑色画笔 · P" aria-label="黑色画笔" aria-pressed="true"><svg><use href="#i-pen"/></svg></button>
     <button class="pen-button" data-pen="#d64e54" style="--ink:#d64e54" title="红色画笔" aria-label="红色画笔" aria-pressed="false"><svg><use href="#i-pen"/></svg></button>
@@ -35,12 +42,14 @@
     <button id="tool-settings-toggle" class="icon-button" aria-label="画笔设置" title="画笔设置" popovertarget="tool-settings">···</button>
   </div>
   <button id="view-settings-toggle" class="icon-button corner-right" aria-label="画布设置" title="画布设置" popovertarget="view-settings"><svg><use href="#i-settings"/></svg></button>
-  <div id="tool-settings" class="popover tool-popover" popover><h3>书写工具</h3><label>画笔颜色 <input id="color" type="color" value="#253445"></label><label>画笔粗细 <input id="width" type="range" min="1" max="18" value="3"></label><label>橡皮大小 <input id="eraser-width" type="range" min="8" max="80" value="24"></label><button id="clear" class="danger">清空当前画布笔迹</button></div>
-  <div id="view-settings" class="popover view-popover" popover><h3>画布设置</h3><div id="file-settings"><label for="reading-mode">阅读模式</label><select id="reading-mode"><option value="standard">普通读写</option><option value="english">英语阅读模式</option></select><p id="english-help" hidden>手形工具下，左键点词或拖选短语（最多 12 个词）查看离线释义。拖动空白处或使用鼠标中键移动画布。切换画笔可批注。支持文字型 PDF、TXT 和 Markdown；扫描件与图片暂不支持点词。</p><label for="file-width">文件宽度 <output id="file-width-value"></output></label><input id="file-width" type="range" min="200" max="1600" step="20" value="720"><label for="file-left">左侧留白 <output id="file-left-value"></output></label><input id="file-left" type="range" min="0" max="800" step="8" value="48"><label for="file-gap">文件页间距 <output id="file-gap-value"></output></label><input id="file-gap" type="range" min="0" max="200" step="4" value="24"><button id="reset-file">恢复文件显示</button></div><button id="return-origin">回到起点</button><p>滚轮上下移动；选择手形工具可拖动。书写到画布底部时向下延伸；滚动和拖动不会增加空白。</p></div>
-  <div id="save-status" role="status">正在载入…</div><div class="writer-actions"><button id="previous-question" class="submit-button">上一题</button><button id="next-question" class="submit-button">下一题</button><button id="capture-answer" class="submit-button">截图答案</button><button id="toggle-ai" class="submit-button" aria-pressed="false" title="打开 AI 问答">AI 问答</button></div>
+  <div id="tool-settings" class="popover tool-popover" popover><h3>书写工具</h3><label>画笔颜色 <input id="color" type="color" value="#253445"></label><label>画笔粗细 <input id="width" type="range" min="1" max="18" value="3"></label><label>橡皮大小 <input id="eraser-width" type="range" min="8" max="80" value="24"></label><label>自动整理形状 <input id="auto-shape" type="checkbox" checked></label><p>画完停留约 2 秒，识别直线、圆或椭圆。撤销可恢复原笔迹。</p><button id="clear" class="danger">清空当前画布笔迹</button></div>
+  <div id="view-settings" class="popover view-popover" popover><h3>画布设置</h3><div id="reading-note-settings" hidden><button id="edit-reading-file">编辑文件</button><label for="reading-note-target">默认保存到笔记</label><select id="reading-note-target"></select><label for="reading-note-folder">自动创建笔记的位置</label><select id="reading-note-folder"></select></div><div id="file-settings"><label for="reading-mode">阅读模式</label><select id="reading-mode"><option value="standard">普通读写</option><option value="english">英语阅读模式</option></select><p id="english-help" hidden>手形工具下，左键点词或拖选短语（最多 12 个词）查看离线释义。拖动空白处或使用鼠标中键移动画布。切换画笔可批注。支持文字型 PDF、TXT 和 Markdown；扫描件与图片暂不支持点词。</p><label for="file-width">文件宽度 <output id="file-width-value"></output></label><input id="file-width" type="range" min="200" max="1600" step="20" value="720"><label for="file-left">左侧留白 <output id="file-left-value"></output></label><input id="file-left" type="range" min="0" max="800" step="8" value="48"><label for="file-gap">文件页间距 <output id="file-gap-value"></output></label><input id="file-gap" type="range" min="0" max="200" step="4" value="24"><button id="reset-file">恢复文件显示</button></div><button id="return-origin">回到起点</button><p>滚轮上下移动；选择手形工具可拖动。书写到画布底部时向下延伸；滚动和拖动不会增加空白。</p></div>
+  <div id="save-status" role="status">正在载入…</div><div class="writer-actions"><button id="previous-question" class="submit-button">上一题</button><button id="next-question" class="submit-button">下一题</button><button id="capture-answer" class="submit-button">截图答案</button><button id="capture-note" class="submit-button" hidden title="截图追加到课程笔记">截图笔记</button><button id="note-add-text" class="submit-button" hidden>添加文字</button><button id="note-edit-content" class="submit-button" hidden>编辑内容</button><button id="toggle-ai" class="submit-button" aria-pressed="false" title="打开 AI 问答">AI 问答</button></div>
   <aside id="writer-ai-panel" hidden aria-label="AI 问答浮窗"><iframe id="writer-ai-frame" src="overlay.html?embedded=1" title="AI 问答"></iframe></aside>
-  <aside id="word-popup" hidden role="dialog" aria-label="单词与短语释义"><header><strong id="word-title"></strong><button id="word-close" aria-label="关闭释义">×</button></header><div id="word-phonetic"></div><div id="word-lemma"></div><div id="word-status" role="status"></div><ul id="word-definitions"></ul><footer>离线词典 · ECDICT</footer></aside>
+  <button id="reading-selection-note" hidden>加入笔记</button>
+  <aside id="word-popup" hidden role="dialog" aria-label="单词与短语释义"><header><strong id="word-title"></strong><button id="word-close" aria-label="关闭释义">×</button></header><div id="word-phonetic"></div><div id="word-lemma"></div><div id="word-status" role="status"></div><ul id="word-definitions"></ul><div id="word-ai-result" hidden></div><footer><span>离线词典 · ECDICT</span><div class="word-actions"><button id="word-ai" title="发送当前单词或短语给已配置的 AI">AI翻译</button><button id="word-note">加入笔记</button></div></footer></aside>
+  <dialog id="note-text-dialog"><form><h3>添加笔记文字</h3><textarea id="note-new-text" rows="8" maxlength="50000" required aria-label="笔记文字"></textarea><p id="note-text-error" role="status"></p><div><button type="button" id="note-text-cancel">取消</button><button type="submit">加入笔记</button></div></form></dialog>
   <dialog id="pdf-password"><form><h3>请输入 PDF 密码</h3><input type="password" required autocomplete="off" aria-label="PDF 密码"><div><button type="button" data-cancel>取消</button><button type="submit">打开</button></div></form></dialog>
   <script src="reader-words.js"></script><script type="module" src="reader.js"></script><script src="english-reader.js"></script>
-  <script src="vendor/katex/katex.min.js"></script><script src="math.js"></script><script src="writer-question.js"></script><script src="board-model.js"></script><script src="ink.js"></script><script src="writer.js"></script>
+  <script src="vendor/katex/katex.min.js"></script><script src="math.js"></script><script src="lesson-selection.js"></script><script src="writer-question.js"></script><script src="board-model.js"></script><script src="ink.js"></script><script src="shape-fit.js"></script><script src="writer-text.js"></script><script src="writer.js"></script>
 </body></html>
